@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nexus Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell directory-mode">
+      <aside class="global-rail" aria-label="Global navigation">
+        <div class="brand-mark" aria-label="Nexus home">N</div>
+        <nav class="rail-nav">
+          <button class="rail-button active" type="button" data-global="apps" aria-label="Apps" aria-pressed="true"><span class="rail-icon grid-icon"></span></button>
+          <button class="rail-button" type="button" data-global="activity" aria-label="Activity" aria-pressed="false"><span class="rail-icon pulse-icon"></span></button>
+          <button class="rail-button" type="button" data-global="settings" aria-label="Settings" aria-pressed="false"><span class="rail-icon gear-icon">+</span></button>
+        </nav>
+        <button class="profile-orb" type="button" aria-label="Open profile">RS</button>
+      </aside>
+
+      <aside class="workspace-sidebar">
+        <div class="workspace-heading">
+          <div>
+            <p class="eyebrow">Application</p>
+            <h1 id="sidebar-context-name">Orbit</h1>
+          </div>
+          <button class="icon-button" type="button" aria-label="Workspace options">•••</button>
+        </div>
+
+        <div class="sidebar-section-label">App navigation</div>
+        <div class="app-list" id="app-list" aria-label="Applications"></div>
+
+        <div class="sidebar-divider"></div>
+        <nav class="section-nav" id="section-nav" aria-label="Application sections"></nav>
+
+        <div class="sidebar-footer">
+          <div class="status-dot"></div>
+          <div><strong>All systems operational</strong><span>Updated just now</span></div>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div class="breadcrumbs" id="breadcrumbs"><button type="button" data-breadcrumb="apps">Apps</button><span class="crumb-separator">/</span><button type="button" data-breadcrumb="app" id="breadcrumb-app">All apps</button><span class="crumb-separator">/</span><button type="button" data-breadcrumb="section" id="breadcrumb-section">Directory</button></div>
+          <div class="topbar-actions">
+            <button class="topbar-button" type="button"><span class="shortcut">⌘ K</span> Command menu</button>
+            <button class="notification-button" type="button" aria-label="Notifications"><span class="notification-dot"></span>◌</button>
+          </div>
+        </header>
+
+        <div class="apps-directory" id="apps-directory">
+          <section class="directory-heading">
+            <div>
+              <p class="eyebrow accent-eyebrow">Workspace directory</p>
+              <h2>Apps</h2>
+              <p class="page-description">Select an app to manage releases, environments, and delivery.</p>
+            </div>
+            <label class="search-field" for="app-search"><span>⌕</span><input id="app-search" type="search" placeholder="Search apps" autocomplete="off" /><kbd>⌘ K</kbd></label>
+          </section>
+          <section class="directory-panel" aria-label="All applications">
+            <div class="directory-panel-heading"><div><p class="eyebrow">Your applications</p><h3>All apps</h3></div><span class="directory-count" id="directory-count">3 apps</span></div>
+            <div class="directory-grid" id="directory-list"></div>
+            <p class="empty-directory" id="empty-directory" hidden>No apps match your search.</p>
+          </section>
+        </div>
+
+        <div class="content-wrap" id="app-content" hidden>
+          <section class="page-heading">
+            <div>
+              <p class="eyebrow accent-eyebrow" id="page-kicker">Application overview</p>
+              <h2 id="page-title">Orbit</h2>
+              <p class="page-description" id="page-description">Your production command center. Keep releases moving with confidence.</p>
+            </div>
+          </section>
+
+          <div id="section-content" class="section-content" hidden></div>
+
+          <div id="dashboard-content">
+          <section class="metrics-grid" aria-label="Application metrics">
+            <article class="metric-card hero-metric">
+              <div class="card-label">Current version <span class="live-pill">LIVE</span></div>
+              <div class="version-value">v2.14.0</div>
+              <div class="metric-meta"><span class="green-text">↑ 12%</span> from last release</div>
+              <div class="sparkline"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            </article>
+            <article class="metric-card">
+              <div class="card-label">Deployments <span class="muted-time">last 30 days</span></div>
+              <div class="metric-value">48</div>
+              <div class="metric-meta"><span class="green-text">↑ 8.4%</span> vs previous period</div>
+              <div class="bar-chart"><i style="height: 35%"></i><i style="height: 60%"></i><i style="height: 44%"></i><i style="height: 75%"></i><i style="height: 50%"></i><i style="height: 88%"></i><i style="height: 68%"></i><i style="height: 94%"></i><i style="height: 78%"></i><i style="height: 100%"></i></div>
+            </article>
+            <article class="metric-card">
+              <div class="card-label">Release health <span class="muted-time">all environments</span></div>
+              <div class="metric-value">99.8<span class="metric-unit">%</span></div>
+              <div class="metric-meta"><span class="green-text">Excellent</span> · 1 incident</div>
+              <div class="health-track"><span></span></div>
+            </article>
+          </section>
+
+          <section class="lower-grid">
+            <article class="panel release-panel">
+              <div class="panel-header"><div><p class="eyebrow">Latest activity</p><h3>Recent releases</h3></div><button class="text-button" type="button" data-section="releases">View all <span>→</span></button></div>
+              <div class="release-table" id="release-table"></div>
+            </article>
+            <article class="panel environment-panel">
+              <div class="panel-header"><div><p class="eyebrow">Deployment map</p><h3>Environments</h3></div><button class="icon-button" type="button" aria-label="Environment options">•••</button></div>
+              <div class="environment-list" id="environment-list"></div>
+            </article>
+          </section>
+          </div>
+        </div>
+      </main>
+    </div>
+    <script src="app.js"></script>
+  </body>
+</html>
