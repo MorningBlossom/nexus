@@ -13,6 +13,9 @@ async function loadApps() {
     const response = await fetch('/apps');
     if (!response.ok) throw new Error('Failed to fetch apps');
     const data = await response.json();
+    if (!Array.isArray(data)) {
+      throw new Error("Invalid /apps response: expected an array");
+    }
 
     apps = data.map(app => ({
       id: app.app_id,
@@ -20,6 +23,10 @@ async function loadApps() {
       mark: app.mark,
       description: app.description
     }));
+
+    if (apps.length > 0 && !apps.some((app) => app.id === selectedApp)) {
+      selectedApp = apps[0].id;
+    }
 
     // Re-render components after data is loaded
     renderApps();
