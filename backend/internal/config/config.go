@@ -11,15 +11,28 @@ type Config struct {
 	GithubWebhookSecret     string
 	GithubAppId             int64
 	GithubAppPrivateKeyPath string
+	GithubInstallationId    int64
+	GithubPAT               string
+	DBurl                   string
+	FrontendStaticPath      string
 }
 
-func Load() Config {
+func Load() *Config {
 	_ = godotenv.Load()
 
-	return Config{
+	frontendPath := os.Getenv("FRONTEND_STATIC_PATH")
+	if frontendPath == "" {
+		frontendPath = "./frontend"
+	}
+
+	return &Config{
 		GithubWebhookSecret:     os.Getenv("GITHUB_WEBHOOK_SECRET"),
 		GithubAppId:             getInt64Env("GITHUB_APP_ID", 0),
 		GithubAppPrivateKeyPath: os.Getenv("GITHUB_PRIVATE_KEY_PATH"),
+		GithubInstallationId:    getInt64Env("GITHUB_INSTALLATION_ID", 0),
+		GithubPAT:               os.Getenv("GITHUB_PAT"),
+		DBurl:                   os.Getenv("MONGODB_URL"),
+		FrontendStaticPath:      frontendPath,
 	}
 }
 

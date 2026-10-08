@@ -1,8 +1,4 @@
-const apps = [
-  { id: "orbit", name: "Orbit", mark: "O", description: "Your production command center." },
-  { id: "canvas", name: "Canvas", mark: "C", description: "Build, preview, and ship creative work." },
-  { id: "ledger", name: "Ledger", mark: "L", description: "Reliable services for every transaction." }
-];
+let apps = [];
 
 const sections = [
   { id: "overview", label: "Overview", symbol: "⊞" },
@@ -11,6 +7,42 @@ const sections = [
   { id: "environments", label: "Environments", symbol: "⌘" },
   { id: "services", label: "Services", symbol: "◇" }
 ];
+
+async function loadApps() {
+  try {
+    const response = await fetch('/apps');
+    if (!response.ok) throw new Error('Failed to fetch apps');
+    const data = await response.json();
+
+    apps = data.map(app => ({
+      id: app.app_id,
+      name: app.name,
+      mark: app.mark,
+      description: app.description
+    }));
+
+    // Re-render components after data is loaded
+    renderApps();
+    renderDirectory();
+    if (!showingDirectory) {
+      renderContent();
+    }
+  } catch (error) {
+    console.error('Error loading apps:', error);
+  }
+}
+
+async function loadServices(appId) {
+  try {
+    const response = await fetch(`/services?app_id=${appId}`);
+    if (!response.ok) throw new Error('Failed to fetch services');
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error loading services:', error);
+    return [];
+  }
+}
 
 const releaseRows = [
   ["v2.14.0", "Improve edge caching", "RS", "2m ago"],
@@ -192,7 +224,7 @@ function renderEnvironmentEditor() {
   });
 }
 
-function renderSectionContent() {
+async function renderSectionContent() {
   if (selectedSection === "overview") {
     dashboardContent.hidden = false;
     sectionContent.hidden = true;
@@ -267,17 +299,13 @@ function renderSectionContent() {
     environmentServiceFilter.addEventListener("change", filterEnvironments);
   }
   if (selectedSection === "services") {
-    const serviceCards = [
-      { name: "Orbit API", runtime: "Node.js · us-east-1", version: "v2.14.0", health: "Healthy", capacity: "4 pods running", deployed: "2m ago" },
-      { name: "Worker queue", runtime: "Go · us-east-1", version: "v2.13.2", health: "Healthy", capacity: "6 tasks running", deployed: "Yesterday" },
-      { name: "Image processor", runtime: "Python · us-west-2", version: "v1.8.4", health: "Degraded", capacity: "2 pods running", deployed: "3 days ago" }
-    ];
+    const services = await loadServices(selectedApp);
     sectionContent.innerHTML = `
       <section class="service-card-stack"><div class="service-stack-header"><div><p class="eyebrow">Runtime inventory</p><h3>Active services</h3></div><button class="secondary-button" type="button">Service settings <span>↗</span></button></div>
-        ${serviceCards.map((service) => `
+        ${services.map((service) => `
           <article class="service-card ${service.health === "Degraded" ? "degraded-service" : ""}">
-            <div class="service-card-header"><div><h3>${service.name}</h3><p>${service.runtime} · ${service.version}</p></div><span class="service-health ${service.health === "Healthy" ? "healthy-health" : "degraded-health"}">${service.health}</span></div>
-            <div class="service-card-details"><div><span class="eyebrow">Capacity</span><strong>${service.capacity}</strong></div><div><span class="eyebrow">Last deployed</span><strong>${service.deployed}</strong></div><div class="service-card-actions"><button class="secondary-button" type="button" data-service-action="restart">Restart</button><button class="primary-button" type="button" data-service-action="scale">Scale</button></div></div>
+            <div class="service-card-header"><div><h3>${service.service_id}</h3><p>${service.runtime} · ${service.port}</p></div><span class="service-health ${service.health === "Healthy" ? "healthy-health" : "degraded-health"}">${service.health || "Healthy"}</span></div>
+            <div class="service-card-details"><div><span class="eyebrow">Capacity</span><strong>${service.capacity || "N/A"}</strong></div><div><span class="eyebrow">Last deployed</span><strong>${service.deployed_at ? new Date(service.deployed_at).toLocaleString() : "N/A"}</strong></div><div class="service-card-actions"><button class="secondary-button" type="button" data-service-action="restart">Restart</button><button class="primary-button" type="button" data-service-action="scale">Scale</button></div></div>
           </article>
         `).join("")}
       </section>`;
@@ -441,9 +469,21 @@ document.querySelector(".release-panel").addEventListener("click", (event) => {
   }
 });
 
-renderApps();
+// Existing logic...
+// Remove the immediate renders that use empty arrays
+// renderApps();
+// renderSections();
+// renderContent();
+// renderData();
+// renderDirectory();
+// showDirectory();
+
+// Initialize dynamic data
+loadApps();
+
+// we still need these to initialize the UI structure
 renderSections();
-renderContent();
 renderData();
-renderDirectory();
 showDirectory();
+
+

@@ -3,9 +3,26 @@ package github
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"time"
 
 	gh "github.com/google/go-github/v68/github"
 )
+
+type ReleaseArtifacts struct {
+	Repo     string    `json:"repo"`
+	Releases []Release `json:"releases"`
+}
+
+type Release struct {
+	Tag       string        `json:"tag"`
+	Packages  []RepoPackage `json:"packages"`
+	CreatedAt time.Time     `json:"-"`
+}
+
+type RepoPackage struct {
+	PackageName string `json:"packageName"`
+}
 
 type Repository struct {
 	api *gh.Client
@@ -23,16 +40,158 @@ func (r *Repository) GetRepository(ctx context.Context, owner string, repo strin
 	return repos, nil
 }
 
-func (r *Repository) GetPackages(
+const packageTypeContainer = "container"
+
+func (r *Repository) GetServicesByRepo(
 	ctx context.Context,
 	owner string,
-	packageName string,
-) ([]*gh.Package, error) {
-	packages, res, err := r.api.Organizations.GetPackage(
+	repo string,
+) ([]string, error) {
+	packages, res, err := r.api.Organizations.ListPackages(
+		ctx,
+		owner,
+		&gh.PackageListOptions{
+			PackageType: new(packageTypeContainer),
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list packages for organization %q: %w", owner, err)
+	}
+
+	if res == nil || res.StatusCode != http.StatusOK {
+		if res == nil {
+			return nil, fmt.Errorf("list packages for organization %q: empty response", owner)
+		}
+
+		return nil, fmt.Errorf(
+			"list packages for organization %q: unexpected status code %d",
+			owner,
+			res.StatusCode,
+		)
+	}
+
+	services := make([]string, 0, len(packages))
+
+	for _, pkg := range packages {
+		if pkg == nil {
+			continue
+		}
+
+		repository := pkg.GetRepository()
+		if repository == nil {
+			continue
+		}
+
+		if repository.GetName() != repo {
+			continue
+		}
+
+		services = append(services, pkg.GetName())
+	}
+
+	return services, nil
+}
+
+func (r *Repository) GetPackagesByName(
+	ctx context.Context,
+	owner string,
+	repoName string,
+) (ReleaseArtifacts, error) {
+	services, err := r.GetServicesByRepo(ctx, owner, repoName)
+	if err != nil {
+		return ReleaseArtifacts{}, err
+	}
+
+	result := ReleaseArtifacts{
+		Repo: repoName,
+	}
+
+	for _, service := range services {
+		versions, res, err := r.api.Organizations.PackageGetAllVersions(
+			ctx,
+			owner,
+			packageTypeContainer,
+			service,
+			nil,
+		)
+		if err != nil {
+			return ReleaseArtifacts{}, fmt.Errorf(
+				"get versions for package %q: %w",
+				service,
+				err,
+			)
+		}
+
+		if res == nil || res.StatusCode != http.StatusOK {
+			if res == nil {
+				return ReleaseArtifacts{}, fmt.Errorf(
+					"get versions for package %q: empty response",
+					service,
+				)
+			}
+
+			return ReleaseArtifacts{}, fmt.Errorf(
+				"get versions for package %q: unexpected status code %d",
+				service,
+				res.StatusCode,
+			)
+		}
+
+		for _, version := range versions {
+			if version == nil || version.Metadata == nil || version.Metadata.Container == nil {
+				continue
+			}
+
+			tags := version.Metadata.Container.Tags
+			if len(tags) == 0 {
+				continue
+			}
+
+			for _, tag := range tags {
+				result.addPackageToRelease(tag, service, version.CreatedAt.Time)
+			}
+		}
+	}
+
+	return result, nil
+}
+
+func (r *ReleaseArtifacts) addPackageToRelease(tag, packageName string, createdAt time.Time) {
+	for i := range r.Releases {
+		if r.Releases[i].Tag != tag {
+			continue
+		}
+
+		r.Releases[i].Packages = append(
+			r.Releases[i].Packages,
+			RepoPackage{
+				PackageName: packageName,
+			},
+		)
+		if createdAt.After(r.Releases[i].CreatedAt) {
+			r.Releases[i].CreatedAt = createdAt
+		}
+		return
+	}
+
+	r.Releases = append(r.Releases, Release{
+		Tag:       tag,
+		Packages: []RepoPackage{
+			{
+				PackageName: packageName,
+			},
+		},
+		CreatedAt: createdAt,
+	})
+}
+
+func (r *Repository) GetPackagesByPackageName(ctx context.Context, owner string, packageName string) ([]*gh.PackageVersion, error) {
+	packages, res, err := r.api.Organizations.PackageGetAllVersions(
 		ctx,
 		owner,
 		"container",
 		packageName,
+		nil,
 	)
 	fmt.Println(packages)
 	if err != nil {
@@ -48,7 +207,36 @@ func (r *Repository) GetPackages(
 		return nil, fmt.Errorf("listing package %q: %w", packageName, err)
 	}
 
-	return []*gh.Package{packages}, nil
+	return packages, nil
+}
+
+func (r *Repository) GetPackageByVersion(
+	ctx context.Context,
+	owner string,
+	packageName string,
+) (*gh.PackageVersion, error) {
+	packages, res, err := r.api.Organizations.PackageGetVersion(
+		ctx,
+		owner,
+		"container",
+		packageName,
+		1330274475,
+	)
+	fmt.Println(packages)
+	if err != nil {
+		if res != nil {
+			return nil, fmt.Errorf(
+				"listing package %q for organization: %s: %w",
+				packageName,
+				res.Status,
+				err,
+			)
+		}
+
+		return nil, fmt.Errorf("listing package %q: %w", packageName, err)
+	}
+
+	return packages, nil
 }
 
 func (r *Repository) GetInstallationRepositories(
