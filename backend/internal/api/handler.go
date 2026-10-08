@@ -87,8 +87,11 @@ func (h *Handler) GetPackagesByName(w http.ResponseWriter, r *http.Request) {
 		repoName = app.AppID
 	}
 	if parts := strings.SplitN(repoName, "/", 2); len(parts) == 2 {
-		owner = parts[0]
-		repoName = parts[1]
+		if parts[0] == owner {
+			repoName = parts[1]
+		} else {
+			repoName = parts[1]
+		}
 	}
 
 	packages, err := h.githubRepo.GetPackagesByName(ctx, owner, repoName)
