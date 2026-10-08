@@ -4,9 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/MorningBlossom/nexus/backend/internal/models"
-
 	"github.com/MorningBlossom/nexus/backend/internal/github"
+	"github.com/MorningBlossom/nexus/backend/internal/models"
 	"github.com/MorningBlossom/nexus/backend/internal/repository"
 )
 
