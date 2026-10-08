@@ -251,7 +251,7 @@ async function renderSectionContent() {
       </section>`;
 
     try {
-      const response = await fetch("/getPackages");
+      const response = await fetch(`/getPackages?app_id=${encodeURIComponent(selectedApp)}`);
       if (!response.ok) throw new Error("Failed to fetch release artifacts");
 
       const data = await response.json();
