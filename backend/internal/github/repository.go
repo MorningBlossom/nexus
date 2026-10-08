@@ -78,15 +78,45 @@ func (r *Repository) GetServicesByRepo(
 		}
 
 		repository := pkg.GetRepository()
-		if repository == nil {
-			continue
-		}
-
-		if repository.GetName() != repo {
+		if repository == nil || repository.GetName() != repo {
 			continue
 		}
 
 		services = append(services, pkg.GetName())
+	}
+
+	// GitHub can return an empty result from the organization package-list
+	// endpoint even when a package is directly accessible. Fall back to the
+	// repository name as a package name so GHCR repositories such as
+	// ghcr.io/MorningBlossom/auth-service are still resolved.
+	if len(services) == 0 {
+		pkg, pkgRes, pkgErr := r.api.Organizations.GetPackage(
+			ctx,
+			owner,
+			packageTypeContainer,
+			repo,
+		)
+		if pkgErr != nil {
+			if pkgRes != nil {
+				return nil, fmt.Errorf(
+					"get package %q for organization %q: %s: %w",
+					repo,
+					owner,
+					pkgRes.Status,
+					pkgErr,
+				)
+			}
+			return nil, fmt.Errorf(
+				"get package %q for organization %q: %w",
+				repo,
+				owner,
+				pkgErr,
+			)
+		}
+
+		if pkg != nil {
+			services = append(services, pkg.GetName())
+		}
 	}
 
 	return services, nil
