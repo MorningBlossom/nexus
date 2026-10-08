@@ -133,6 +133,7 @@ function showDirectory() {
   document.querySelector("#breadcrumb-app").textContent = "All apps";
   document.querySelector("#breadcrumb-section").textContent = "Directory";
   renderApps();
+  renderDirectory(appSearch.value);
 }
 
 function showApp() {
