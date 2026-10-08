@@ -234,22 +234,56 @@ async function renderSectionContent() {
   dashboardContent.hidden = true;
   sectionContent.hidden = false;
   if (selectedSection === "artifacts") {
-    const artifactCards = [
-      { id: "artifact-1", label: "Artifact-1", commit: "Improve edge caching", action: "Restart", actionType: "restart", state: "Deployed" },
-      { id: "artifact-2", label: "Artifact-2", commit: "Add retry policy", action: "Release now", actionType: "release-now", state: "Ready" },
-      { id: "artifact-3", label: "Artifact-3", commit: "Update dependencies", action: "Release now", actionType: "release-now", state: "Ready" }
-    ];
-    const artifactServices = ["orbit-api", "worker-queue", "image-processor", "scheduler", "notifications"];
-      sectionContent.innerHTML = `
-      <div class="release-artifact-stack">${artifactCards.map((artifact) => `
-        <section class="release-artifact-box ${artifact.state === "Deployed" ? "deployed-artifact" : ""}">
-          <div class="release-artifact-header"><div><h3>${artifact.label} <span>[${artifact.commit}]</span></h3></div>${artifact.state === "Deployed" ? `<span class="artifact-status deployed">${artifact.state}</span>` : ""}</div>
-          <div class="release-artifact-list">${artifactServices.map((serviceName) => `
-            <div class="release-artifact-row"><span class="docker-mark">▣</span><div><strong>Docker image</strong><span>${serviceName}</span></div></div>
-          `).join("")}</div>
-          <div class="release-artifact-footer"><span>${artifactServices.length} service artifacts</span><div class="artifact-actions"><button class="secondary-button" type="button" data-release-action="draft" data-artifact-id="${artifact.id}">Draft</button><button class="primary-button" type="button" data-release-action="${artifact.actionType}">${artifact.action}</button></div></div>
-        </section>
-      `).join("")}</div>`;
+    sectionContent.innerHTML = `
+      <section class="release-artifact-stack">
+        <div class="service-stack-header">
+          <div><p class="eyebrow">Container artifacts</p><h3>Latest tagged versions</h3></div>
+        </div>
+        <div id="release-artifacts-content"><p class="empty-directory">Loading latest artifacts...</p></div>
+      </section>`;
+
+    try {
+      const response = await fetch("/getPackages");
+      if (!response.ok) throw new Error("Failed to fetch release artifacts");
+
+      const data = await response.json();
+      const releases = Array.isArray(data.releases) ? data.releases : [];
+      const container = document.querySelector("#release-artifacts-content");
+
+      if (!releases.length) {
+        container.innerHTML = '<p class="empty-directory">No tagged container artifacts found.</p>';
+        return;
+      }
+
+      container.innerHTML = releases.map((release, index) => {
+        const packages = Array.isArray(release.packages) ? release.packages : [];
+        return `
+          <section class="release-artifact-box">
+            <div class="release-artifact-header">
+              <div><h3>${release.tag}</h3><span>Latest tag for ${packages.length === 1 ? "this service" : "these services"}</span></div>
+            </div>
+            <div class="release-artifact-list">
+              ${packages.map((pkg) => `
+                <div class="release-artifact-row">
+                  <span class="docker-mark">▣</span>
+                  <div><strong>Docker image</strong><span>${pkg.packageName}</span></div>
+                </div>
+              `).join("")}
+            </div>
+            <div class="release-artifact-footer">
+              <span>${packages.length} service artifact${packages.length === 1 ? "" : "s"}</span>
+              <div class="artifact-actions">
+                <button class="secondary-button" type="button" data-release-action="draft" data-artifact-id="artifact-${index}">Draft</button>
+                <button class="primary-button" type="button" data-release-action="release-now">Release now</button>
+              </div>
+            </div>
+          </section>`;
+      }).join("");
+    } catch (error) {
+      console.error("Error loading release artifacts:", error);
+      document.querySelector("#release-artifacts-content").innerHTML =
+        '<p class="empty-directory">Unable to load release artifacts.</p>';
+    }
   }
   if (selectedSection === "releases") {
     const releaseCards = [
