@@ -78,15 +78,45 @@ func (r *Repository) GetServicesByRepo(
 		}
 
 		repository := pkg.GetRepository()
-		if repository == nil {
-			continue
-		}
-
-		if repository.GetName() != repo {
+		if repository == nil || repository.GetName() != repo {
 			continue
 		}
 
 		services = append(services, pkg.GetName())
+	}
+
+	// GitHub can return an empty result from the organization package-list
+	// endpoint even when a package is directly accessible. Fall back to the
+	// repository name as a package name so GHCR repositories such as
+	// ghcr.io/MorningBlossom/auth-service are still resolved.
+	if len(services) == 0 {
+		pkg, pkgRes, pkgErr := r.api.Organizations.GetPackage(
+			ctx,
+			owner,
+			packageTypeContainer,
+			repo,
+		)
+		if pkgErr != nil {
+			if pkgRes != nil {
+				return nil, fmt.Errorf(
+					"get package %q for organization %q: %s: %w",
+					repo,
+					owner,
+					pkgRes.Status,
+					pkgErr,
+				)
+			}
+			return nil, fmt.Errorf(
+				"get package %q for organization %q: %w",
+				repo,
+				owner,
+				pkgErr,
+			)
+		}
+
+		if pkg != nil {
+			services = append(services, pkg.GetName())
+		}
 	}
 
 	return services, nil
@@ -137,19 +167,27 @@ func (r *Repository) GetPackagesByName(
 			)
 		}
 
+		// Tags are not required to match between services. Pick the newest
+		// tagged package version independently for each service.
+		var latestVersion *gh.PackageVersion
 		for _, version := range versions {
 			if version == nil || version.Metadata == nil || version.Metadata.Container == nil {
 				continue
 			}
-
-			tags := version.Metadata.Container.Tags
-			if len(tags) == 0 {
+			if len(version.Metadata.Container.Tags) == 0 {
 				continue
 			}
-
-			for _, tag := range tags {
-				result.addPackageToRelease(tag, service, version.CreatedAt.Time)
+			if latestVersion == nil || version.CreatedAt.Time.After(latestVersion.CreatedAt.Time) {
+				latestVersion = version
 			}
+		}
+
+		if latestVersion == nil {
+			continue
+		}
+
+		for _, tag := range latestVersion.Metadata.Container.Tags {
+			result.addPackageToRelease(tag, service, latestVersion.CreatedAt.Time)
 		}
 	}
 

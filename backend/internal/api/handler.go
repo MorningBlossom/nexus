@@ -3,8 +3,10 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/MorningBlossom/nexus/backend/internal/github"
+	"github.com/MorningBlossom/nexus/backend/internal/models"
 	"github.com/MorningBlossom/nexus/backend/internal/repository"
 )
 
@@ -26,6 +28,10 @@ func (h *Handler) GetApps(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	if apps == nil {
+		apps = []*models.App{}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -63,8 +69,30 @@ func (h *Handler) GetAllPackagesByRepo(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetPackagesByName(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	appID := r.URL.Query().Get("app_id")
+	if appID == "" {
+		http.Error(w, "app_id is required", http.StatusBadRequest)
+		return
+	}
+
+	app, err := h.mongoRepo.GetApp(ctx, appID)
+	if err != nil {
+		http.Error(w, "app not found", http.StatusNotFound)
+		return
+	}
+
 	owner := "MorningBlossom"
-	repoName := "auth-service"
+	repoName := app.Repo
+	if repoName == "" {
+		repoName = app.AppID
+	}
+	if parts := strings.SplitN(repoName, "/", 2); len(parts) == 2 {
+		if parts[0] == owner {
+			repoName = parts[1]
+		} else {
+			repoName = parts[1]
+		}
+	}
 
 	packages, err := h.githubRepo.GetPackagesByName(ctx, owner, repoName)
 	if err != nil {
