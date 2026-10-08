@@ -137,19 +137,27 @@ func (r *Repository) GetPackagesByName(
 			)
 		}
 
+		// Tags are not required to match between services. Pick the newest
+		// tagged package version independently for each service.
+		var latestVersion *gh.PackageVersion
 		for _, version := range versions {
 			if version == nil || version.Metadata == nil || version.Metadata.Container == nil {
 				continue
 			}
-
-			tags := version.Metadata.Container.Tags
-			if len(tags) == 0 {
+			if len(version.Metadata.Container.Tags) == 0 {
 				continue
 			}
-
-			for _, tag := range tags {
-				result.addPackageToRelease(tag, service, version.CreatedAt.Time)
+			if latestVersion == nil || version.CreatedAt.Time.After(latestVersion.CreatedAt.Time) {
+				latestVersion = version
 			}
+		}
+
+		if latestVersion == nil {
+			continue
+		}
+
+		for _, tag := range latestVersion.Metadata.Container.Tags {
+			result.addPackageToRelease(tag, service, latestVersion.CreatedAt.Time)
 		}
 	}
 
