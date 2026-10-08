@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/MorningBlossom/nexus/backend/internal/models"
+
 	"github.com/MorningBlossom/nexus/backend/internal/github"
 	"github.com/MorningBlossom/nexus/backend/internal/repository"
 )
@@ -26,6 +28,10 @@ func (h *Handler) GetApps(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	if apps == nil {
+		apps = []*models.App{}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
