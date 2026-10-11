@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -211,6 +212,12 @@ func (r *Repository) GetPackagesByName(
 		}
 		release.CommitSHA = commitSHA
 	}
+
+	// Show the newest release artifacts first, based on the package version
+	// creation timestamp returned by GitHub.
+	sort.SliceStable(result.Releases, func(i, j int) bool {
+		return result.Releases[i].CreatedAt.After(result.Releases[j].CreatedAt)
+	})
 
 	return result, nil
 }
