@@ -192,10 +192,11 @@ function renderContent() {
   const editingEnvironment = selectedSection === "environments" && environmentEditorOpen;
   const showingReleaseDetail = selectedSection === "releases" && releaseDetailOpen;
   const selectedRelease = ["Improve edge caching", "Add retry policy", "Update dependencies"][selectedReleaseIndex];
-  pageTitle.textContent = editingEnvironment ? (editingEnvironmentId ? "Configure environment" : "Add environment") : showingReleaseDetail ? selectedRelease : selectedSection === "overview" ? app.name : section.label;
+  pageTitle.textContent = editingEnvironment ? "" : showingReleaseDetail ? selectedRelease : selectedSection === "overview" ? app.name : section.label;
+  document.querySelector(".page-heading").hidden = editingEnvironment;
   pageDescription.textContent = editingEnvironment ? "Set the environment target, applied service, and artifact attachment." : showingReleaseDetail ? "Deployment details for the selected production release." : selectedSection === "overview" ? app.description : `${section.label} for ${app.name}. Track the work and keep your team moving.`;
   breadcrumbApp.textContent = app.name;
-  breadcrumbSection.textContent = editingEnvironment ? (editingEnvironmentId ? "Configure" : "New environment") : showingReleaseDetail ? "Release details" : section.label;
+  breadcrumbSection.textContent = editingEnvironment ? "Environments" : showingReleaseDetail ? "Release details" : section.label;
   appContent.dataset.section = selectedSection;
   if (editingEnvironment) renderEnvironmentEditor();
   else if (showingReleaseDetail) renderReleaseDetail();
