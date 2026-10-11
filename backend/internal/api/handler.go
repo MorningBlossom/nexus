@@ -271,39 +271,23 @@ func (h *Handler) SaveEnvironment(w http.ResponseWriter, r *http.Request) {
 		environment.Secret = existing.Secret
 	}
 
-	// Preserve existing secret variable values when the editor submits them blank.
+	// Keep existing secret values when the editor submits them blank.
+	existingVariables := make(map[string]models.EnvironmentVariable)
 	if input.ID != "" {
 		existing, err := h.mongoRepo.GetEnvironment(r.Context(), input.AppID, environment.ID)
 		if err != nil {
 			http.Error(w, "environment not found", http.StatusNotFound)
 			return
 		}
-		existingVariables := make(map[string]models.EnvironmentVariable, len(existing.Variables))
 		for _, variable := range existing.Variables {
 			existingVariables[variable.Key] = variable
 		}
-		key := []byte(os.Getenv("NEXUS_ENCRYPTION_KEY"))
-		for i := range input.Variables {
-			input.Variables[i].Key = strings.TrimSpace(input.Variables[i].Key)
-			if input.Variables[i].Key == "" {
-				if strings.TrimSpace(input.Variables[i].Value) != "" {
-					http.Error(w, "variable key is required when a value is provided", http.StatusBadRequest)
-					return
-				}
-				continue
-			}
-			if input.Variables[i].IsSecret && input.Variables[i].Value == "" {
-				if previous, ok := existingVariables[input.Variables[i].Key]; ok && previous.IsSecret {
-					input.Variables[i].Value = previous.Value
-				}
-			}
-		}
 	}
 
-	// Encrypt only populated secret values; ordinary configuration does not need a key.
+	// Encrypt only newly supplied secret values; plain configuration needs no key.
 	key := []byte(os.Getenv("NEXUS_ENCRYPTION_KEY"))
-	for i := range input.Variables {
-		variable := &input.Variables[i]
+	environment.Variables = make([]models.EnvironmentVariable, 0, len(input.Variables))
+	for _, variable := range input.Variables {
 		variable.Key = strings.TrimSpace(variable.Key)
 		if variable.Key == "" && strings.TrimSpace(variable.Value) == "" {
 			continue
@@ -312,24 +296,26 @@ func (h *Handler) SaveEnvironment(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "variable key is required when a value is provided", http.StatusBadRequest)
 			return
 		}
-		if variable.IsSecret && variable.Value != "" {
-			if len(key) != 16 && len(key) != 24 && len(key) != 32 {
-				http.Error(w, "NEXUS_ENCRYPTION_KEY must be 16, 24, or 32 bytes to save a secret", http.StatusInternalServerError)
-				return
+		if variable.IsSecret {
+			if variable.Value == "" {
+				if previous, ok := existingVariables[variable.Key]; ok && previous.IsSecret {
+					// Reuse ciphertext as-is; do not encrypt it a second time.
+					variable.Value = previous.Value
+				}
+			} else {
+				if len(key) != 16 && len(key) != 24 && len(key) != 32 {
+					http.Error(w, "NEXUS_ENCRYPTION_KEY must be 16, 24, or 32 bytes to save a secret", http.StatusInternalServerError)
+					return
+				}
+				encrypted, err := security.Encrypt(variable.Value, key)
+				if err != nil {
+					http.Error(w, "failed to encrypt environment variable secret", http.StatusInternalServerError)
+					return
+				}
+				variable.Value = encrypted
 			}
-			encrypted, err := security.Encrypt(variable.Value, key)
-			if err != nil {
-				http.Error(w, "failed to encrypt environment variable secret", http.StatusInternalServerError)
-				return
-			}
-			variable.Value = encrypted
 		}
-	}
-	environment.Variables = make([]models.EnvironmentVariable, 0, len(input.Variables))
-	for _, variable := range input.Variables {
-		if variable.Key != "" {
-			environment.Variables = append(environment.Variables, variable)
-		}
+		environment.Variables = append(environment.Variables, variable)
 	}
 
 	if input.Secret != "" {
