@@ -194,7 +194,7 @@ function renderContent() {
   const selectedRelease = ["Improve edge caching", "Add retry policy", "Update dependencies"][selectedReleaseIndex];
   pageTitle.textContent = editingEnvironment ? "" : showingReleaseDetail ? selectedRelease : selectedSection === "overview" ? app.name : section.label;
   // Keep the application overview heading visible while editing an environment.\n  // The editor belongs in the main content pane, not a separate full-page title state.\n  document.querySelector(".page-heading").hidden = false;
-  pageDescription.textContent = editingEnvironment ? "Set the environment target, applied service, and artifact attachment." : showingReleaseDetail ? "Deployment details for the selected production release." : selectedSection === "overview" ? app.description : `${section.label} for ${app.name}. Track the work and keep your team moving.`;
+  pageDescription.textContent = editingEnvironment ? "Configure the applied service and artifact attachment." : showingReleaseDetail ? "Deployment details for the selected production release." : selectedSection === "overview" ? app.description : `${section.label} for ${app.name}. Track the work and keep your team moving.`;
   breadcrumbApp.textContent = app.name;
   breadcrumbSection.textContent = editingEnvironment ? "Environments" : showingReleaseDetail ? "Release details" : section.label;
   appContent.dataset.section = selectedSection;
@@ -449,7 +449,7 @@ async function renderSectionContent() {
           ${environmentRecords.map((environment) => `
             <article class="environment-card" data-environment-name="${environment.name.toLowerCase()}" data-environment-url="${environment.url.toLowerCase()}" data-environment-service="${environment.service}">
               <div class="environment-card-header"><div><h3>${environment.name}</h3><p>Secret · ${environment.hasSecret ? "••••••••" : "Not set"}</p></div><span class="service-health ${environment.statusClass}">${environment.status}</span></div>
-              <div class="environment-card-details"><div><span class="eyebrow">Applied service</span><strong>${environment.service}</strong></div><div><span class="eyebrow">Target URL</span><strong>${environment.url || "Not set"}</strong></div><div class="row-actions"><button class="secondary-button" type="button" data-env-action="configure" data-environment-id="${environment.id}">Edit</button><button class="secondary-button" type="button" data-env-action="delete" data-environment-id="${environment.id}">Delete</button></div></div>
+              <div class="environment-card-details"><div class="environment-applied-service"><span class="eyebrow">Applied service</span><strong>${environment.service}</strong></div><div class="row-actions"><button class="secondary-button" type="button" data-env-action="configure" data-environment-id="${environment.id}">Edit</button><button class="secondary-button" type="button" data-env-action="delete" data-environment-id="${environment.id}">Delete</button></div></div>
             </article>
           `).join("")}
       </section>`;
