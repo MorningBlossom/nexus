@@ -183,6 +183,7 @@ func (r *MongoRepository) SaveEnvironment(ctx context.Context, environment *mode
 		"name": environment.Name,
 		"url": environment.URL,
 		"secret": environment.Secret,
+		"variables": environment.Variables,
 		"service": environment.Service,
 		"artifact": environment.Artifact,
 		"created_at": environment.CreatedAt,
