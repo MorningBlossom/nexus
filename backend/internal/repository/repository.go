@@ -146,7 +146,36 @@ func (r *MongoRepository) GetSecrets(ctx context.Context) ([]*models.ProductionS
 
 // --- Environment Repository ---
 
+// migrateLegacyEnvironmentFields upgrades environment documents written with the old name/secret fields.
+// Existing legacy secret values were encrypted before storage, so they are marked as secrets.
+func (r *MongoRepository) migrateLegacyEnvironmentFields(ctx context.Context, appID string, id *primitive.ObjectID) error {
+	filter := bson.M{"app_id": appID}
+	if id != nil {
+		filter["_id"] = *id
+	}
+	coll := r.db.Collection("environments")
+
+	if _, err := coll.UpdateMany(ctx, bson.M{"app_id": appID, "name": bson.M{"$exists": true}}, bson.M{"$rename": bson.M{"name": "env_name"}}); err != nil {
+		return err
+	}
+
+	secretFilter := bson.M{"app_id": appID, "secret": bson.M{"$exists": true}}
+	if id != nil {
+		secretFilter["_id"] = *id
+	}
+	_, err := coll.UpdateMany(ctx, secretFilter, bson.M{
+		"$rename": bson.M{"secret": "env_value"},
+		"$set":    bson.M{"is_secret": true},
+	})
+	return err
+}
+
+
+
 func (r *MongoRepository) ListEnvironmentsByApp(ctx context.Context, appID string) ([]*models.Environment, error) {
+	if err := r.migrateLegacyEnvironmentFields(ctx, appID, nil); err != nil {
+		return nil, err
+	}
 	cursor, err := r.db.Collection("environments").Find(ctx, bson.M{"app_id": appID, "deleted": bson.M{"$ne": true}}, options.Find().SetSort(bson.D{{Key: "created_at", Value: 1}}))
 	if err != nil {
 		return nil, err
@@ -161,6 +190,9 @@ func (r *MongoRepository) ListEnvironmentsByApp(ctx context.Context, appID strin
 }
 
 func (r *MongoRepository) GetEnvironment(ctx context.Context, appID string, id primitive.ObjectID) (*models.Environment, error) {
+	if err := r.migrateLegacyEnvironmentFields(ctx, appID, &id); err != nil {
+		return nil, err
+	}
 	var environment models.Environment
 	if err := r.db.Collection("environments").FindOne(ctx, bson.M{"_id": id, "app_id": appID}).Decode(&environment); err != nil {
 		return nil, err
@@ -189,7 +221,7 @@ func (r *MongoRepository) SaveEnvironment(ctx context.Context, environment *mode
 		"created_at": environment.CreatedAt,
 		"updated_at": environment.UpdatedAt,
 		"deleted": false,
-	}}
+	}, "$unset": bson.M{"name": "", "secret": ""}}
 	_, err := r.db.Collection("environments").UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
 	return err
 }
