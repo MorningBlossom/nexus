@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	gh "github.com/google/go-github/v68/github"
@@ -15,9 +16,11 @@ type ReleaseArtifacts struct {
 }
 
 type Release struct {
-	Tag       string        `json:"tag"`
-	Packages  []RepoPackage `json:"packages"`
-	CreatedAt time.Time     `json:"-"`
+	Tag           string        `json:"tag"`
+	CommitMessage string        `json:"commitMessage"`
+	CommitSHA     string        `json:"commitSha"`
+	Packages      []RepoPackage `json:"packages"`
+	CreatedAt     time.Time     `json:"-"`
 }
 
 type RepoPackage struct {
@@ -189,6 +192,23 @@ func (r *Repository) GetPackagesByName(
 		for _, tag := range latestVersion.Metadata.Container.Tags {
 			result.addPackageToRelease(tag, service, latestVersion.CreatedAt.Time)
 		}
+	}
+
+	// Resolve each image tag to its Git commit so the UI can display the
+	// commit subject and SHA rather than the container tag.
+	for i := range result.Releases {
+		release := &result.Releases[i]
+		commit, _, commitErr := r.api.Repositories.GetCommit(ctx, owner, repoName, release.Tag, nil)
+		if commitErr != nil || commit == nil || commit.GetCommit() == nil {
+			// Keep artifacts visible even when a tag is not a commit ref or
+			// GitHub cannot resolve its commit metadata.
+			release.CommitMessage = release.Tag
+			release.CommitSHA = release.Tag
+			continue
+		}
+
+		release.CommitMessage = strings.SplitN(commit.GetCommit().GetMessage(), "\n", 2)[0]
+		release.CommitSHA = commit.GetSHA()
 	}
 
 	return result, nil
