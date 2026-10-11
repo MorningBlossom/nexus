@@ -68,7 +68,6 @@ async function loadEnvironments(appId) {
   environmentRecords = data.map((environment) => ({
     id: environment.id,
     name: environment.name,
-    url: environment.url || '',
     hasSecret: environment.has_secret,
     secret: environment.secret || "",
     variables: Array.isArray(environment.variables) ? environment.variables : [],
@@ -291,7 +290,6 @@ function renderEnvironmentEditor() {
       id: editingEnvironmentId || "",
       app_id: selectedApp,
       name: values.name.trim(),
-      url: previous?.url || `${values.name.trim().toLowerCase().replace(/\s+/g, "-")}.orbit.app`,
       secret: values.secret,
       variables: Array.from(managementForm.querySelectorAll("[data-variable-row]")).map((row) => ({
         key: row.querySelector('input[name="variable-key"]').value.trim(),
@@ -434,7 +432,7 @@ async function renderSectionContent() {
         <div class="environment-toolbar"><label class="search-field" for="environment-search"><span>⌕</span><input id="environment-search" type="search" placeholder="Search environments" autocomplete="off" /></label><label class="service-filter" for="environment-service-filter"><span>Service</span><select id="environment-service-filter"><option value="all">All services</option><option value="Orbit API">Orbit API</option><option value="Worker queue">Worker queue</option><option value="Image processor">Image processor</option></select></label></div>
         <p class="empty-directory" id="environment-empty" hidden>No environments match your filters.</p>
           ${environmentRecords.map((environment) => `
-            <article class="environment-card" data-environment-name="${environment.name.toLowerCase()}" data-environment-url="${environment.url.toLowerCase()}" data-environment-service="${environment.service}">
+            <article class="environment-card" data-environment-name="${environment.name.toLowerCase()}" data-environment-service="${environment.service}">
               <div class="environment-card-header"><div><h3>${environment.name}</h3><p>Secret · ${environment.secret ? escapeHTML(environment.secret) : "Not set"}</p></div><span class="service-health ${environment.statusClass}">${environment.status}</span></div>
               <div class="environment-card-details"><div class="environment-applied-service"><span class="eyebrow">Applied service</span><strong>${environment.service}</strong></div><div class="row-actions"><button class="secondary-button" type="button" data-env-action="configure" data-environment-id="${environment.id}">Edit</button><button class="secondary-button" type="button" data-env-action="delete" data-environment-id="${environment.id}">Delete</button></div></div>
             </article>
