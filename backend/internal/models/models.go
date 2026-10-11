@@ -52,3 +52,17 @@ type ProductionSecret struct {
 	Value     string              `bson:"value" json:"value"`
 	UpdatedAt time.Time           `bson:"updated_at" json:"updated_at"`
 }
+
+
+// Environment represents an app-specific deployment environment.
+type Environment struct {
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
+	AppID     string             `bson:"app_id" json:"app_id"`
+	Name      string             `bson:"name" json:"name"`
+	URL       string             `bson:"url" json:"url"`
+	Secret    string             `bson:"secret" json:"-"`
+	Service   string             `bson:"service" json:"service"`
+	Artifact  string             `bson:"artifact" json:"artifact"`
+	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
+	UpdatedAt time.Time          `bson:"updated_at" json:"updated_at"`
+}
