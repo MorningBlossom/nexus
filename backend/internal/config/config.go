@@ -23,6 +23,14 @@ func Load() *Config {
 	frontendPath := os.Getenv("FRONTEND_STATIC_PATH")
 	if frontendPath == "" {
 		frontendPath = "./frontend"
+		// The service is often started from the backend directory, while the
+		// frontend directory lives at the repository root. Support both working
+		// directories without requiring a local environment override.
+		if _, err := os.Stat(frontendPath); err != nil {
+			if _, parentErr := os.Stat("../frontend"); parentErr == nil {
+				frontendPath = "../frontend"
+			}
+		}
 	}
 
 	return &Config{
