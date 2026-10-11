@@ -226,7 +226,7 @@ function renderEnvironmentEditor() {
       ${environmentFormOpen ? "" : `
       <section class="environment-manage-card"><div class="environment-manage-header"><p class="eyebrow">Environment targets</p><span>${environmentRecords.length} environments</span></div><div class="environment-list-header"><span>ENV NAME</span><span>SECRET</span><span>SERVICE NAME</span><span>ACTIONS</span></div>
         <div class="environment-manage-list">${environmentRecords.map((item) => `
-          <div class="environment-manage-row"><strong>${item.name}</strong><span>${item.hasSecret ? "••••••••" : "Not set"}</span><span>${item.service}</span><span class="row-actions"><button type="button" data-env-action="configure" data-environment-id="${item.id}">Edit</button><button type="button" data-env-action="delete" data-environment-id="${item.id}">Delete</button></span></div>
+          <div class="environment-manage-row"><strong>${item.name}</strong><span>${item.secret ? escapeHTML(item.secret) : "Not set"}</span><span>${item.service}</span><span class="row-actions"><button type="button" data-env-action="configure" data-environment-id="${item.id}">Edit</button><button type="button" data-env-action="delete" data-environment-id="${item.id}">Delete</button></span></div>
         `).join("")}</div>
       </section>
       ${environmentChanges.length ? `<section class="environment-changes-card"><div class="environment-manage-header"><p class="eyebrow">Recent changes</p><span>${environmentChanges.length} pending</span></div><div class="environment-change-list">${environmentChanges.map((change) => `<div class="environment-change-row"><span class="change-indicator">${change.action === "deleted" ? "−" : change.action === "created" ? "+" : "✎"}</span><div><strong>${change.label}</strong><small>${change.action === "deleted" ? "Environment deleted" : change.action === "created" ? "Environment created" : "Environment updated"}</small></div><button class="secondary-button" type="button" data-env-action="undo" data-change-id="${change.id}">Undo</button></div>`).join("")}</div></section>` : ""}
@@ -271,7 +271,7 @@ function renderEnvironmentEditor() {
     const row = document.createElement("div");
     row.className = "environment-variable-row";
     row.dataset.variableRow = "";
-    row.innerHTML = `<label><span>KEY</span><input name="variable-key" value="${escapeHTML(variable.key || "")}" placeholder="PORT" /></label><label><span>VALUE</span><input name="variable-value" type="${variable.is_secret ? "password" : "text"}" value="${variable.is_secret ? "" : escapeHTML(variable.value || "")}" placeholder="${variable.is_secret && variable.has_value ? "Leave blank to keep saved secret" : "8080"}" /></label><label><span>SECRET?</span><input name="variable-is-secret" type="checkbox" ${variable.is_secret ? "checked" : ""} /></label><button type="button" class="secondary-button" data-remove-variable>Remove</button>`;
+    row.innerHTML = `<label><span>KEY</span><input name="variable-key" value="${escapeHTML(variable.key || "")}" placeholder="PORT" /></label><label><span>VALUE</span><input name="variable-value" type="text" value="${escapeHTML(variable.value || "")}" placeholder="8080" /></label><label><span>SECRET?</span><input name="variable-is-secret" type="checkbox" ${variable.is_secret ? "checked" : ""} /></label><button type="button" class="secondary-button" data-remove-variable>Remove</button>`;
     variableList.appendChild(row);
   };
   if (addVariableButton) addVariableButton.addEventListener("click", () => appendVariableRow());
@@ -280,20 +280,9 @@ function renderEnvironmentEditor() {
       const removeButton = event.target.closest("[data-remove-variable]");
       if (removeButton) removeButton.closest("[data-variable-row]").remove();
     });
-    variableList.addEventListener("change", (event) => {
-      if (event.target.matches('input[name="variable-is-secret"]')) {
-        const valueInput = event.target.closest("[data-variable-row]").querySelector('input[name="variable-value"]');
-        valueInput.type = event.target.checked ? "password" : "text";
-      }
-    });
   }
-  const secretInput = document.querySelector("#environment-management-form input[name=\"secret\"]");
-  const secretCheckbox = document.querySelector("#environment-management-form input[name=\"secret-is-secret\"]");
-  if (managementForm && secretInput && secretCheckbox) {
-    secretCheckbox.addEventListener("change", () => {
-      secretInput.type = secretCheckbox.checked ? "password" : "text";
-    });
-  }
+  // Secret values remain visible in the editor by design; the checkbox marks
+  // whether the value is treated as a secret, it does not mask the input.
   if (managementForm) managementForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(managementForm));
