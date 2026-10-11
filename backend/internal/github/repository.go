@@ -200,15 +200,16 @@ func (r *Repository) GetPackagesByName(
 		release := &result.Releases[i]
 		commit, _, commitErr := r.api.Repositories.GetCommit(ctx, owner, repoName, release.Tag, nil)
 		if commitErr != nil || commit == nil || commit.GetCommit() == nil {
-			// Keep artifacts visible even when a tag is not a commit ref or
-			// GitHub cannot resolve its commit metadata.
-			release.CommitMessage = release.Tag
-			release.CommitSHA = release.Tag
+			// Keep the image tag visible, but don't misrepresent it as a commit SHA.
 			continue
 		}
 
 		release.CommitMessage = strings.SplitN(commit.GetCommit().GetMessage(), "\n", 2)[0]
-		release.CommitSHA = commit.GetSHA()
+		commitSHA := commit.GetSHA()
+		if len(commitSHA) > 7 {
+			commitSHA = commitSHA[:7]
+		}
+		release.CommitSHA = commitSHA
 	}
 
 	return result, nil
