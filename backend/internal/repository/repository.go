@@ -147,7 +147,7 @@ func (r *MongoRepository) GetSecrets(ctx context.Context) ([]*models.ProductionS
 // --- Environment Repository ---
 
 func (r *MongoRepository) ListEnvironmentsByApp(ctx context.Context, appID string) ([]*models.Environment, error) {
-	cursor, err := r.db.Collection("environments").Find(ctx, bson.M{"app_id": appID}, options.Find().SetSort(bson.D{{Key: "created_at", Value: 1}}))
+	cursor, err := r.db.Collection("environments").Find(ctx, bson.M{"app_id": appID, "deleted": bson.M{"$ne": true}}, options.Find().SetSort(bson.D{{Key: "created_at", Value: 1}}))
 	if err != nil {
 		return nil, err
 	}
@@ -187,17 +187,29 @@ func (r *MongoRepository) SaveEnvironment(ctx context.Context, environment *mode
 		"artifact": environment.Artifact,
 		"created_at": environment.CreatedAt,
 		"updated_at": environment.UpdatedAt,
+		"deleted": false,
 	}}
 	_, err := r.db.Collection("environments").UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
 	return err
 }
 
 func (r *MongoRepository) DeleteEnvironment(ctx context.Context, appID string, id primitive.ObjectID) error {
-	result, err := r.db.Collection("environments").DeleteOne(ctx, bson.M{"_id": id, "app_id": appID})
+	result, err := r.db.Collection("environments").UpdateOne(ctx, bson.M{"_id": id, "app_id": appID, "deleted": bson.M{"$ne": true}}, bson.M{"$set": bson.M{"deleted": true, "updated_at": time.Now().UTC()}})
 	if err != nil {
 		return err
 	}
-	if result.DeletedCount == 0 {
+	if result.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
+func (r *MongoRepository) RestoreEnvironment(ctx context.Context, appID string, id primitive.ObjectID) error {
+	result, err := r.db.Collection("environments").UpdateOne(ctx, bson.M{"_id": id, "app_id": appID, "deleted": true}, bson.M{"$set": bson.M{"deleted": false, "updated_at": time.Now().UTC()}})
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
 		return mongo.ErrNoDocuments
 	}
 	return nil
