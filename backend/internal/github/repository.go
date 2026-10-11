@@ -212,7 +212,11 @@ func (r *Repository) GetPackagesByName(
 		}
 
 		release.CommitMessage = strings.SplitN(commit.GetCommit().GetMessage(), "\n", 2)[0]
-		release.CommitTime = commit.GetCommit().GetCommitter().GetDate()
+		// go-github returns a github.Timestamp here; use its embedded time.Time.
+		// The committer metadata can be absent, so guard it before reading the date.
+		if committer := commit.GetCommit().GetCommitter(); committer != nil {
+			release.CommitTime = committer.GetDate().Time
+		}
 		commitSHA := commit.GetSHA()
 		if len(commitSHA) > 7 {
 			commitSHA = commitSHA[:7]
@@ -220,15 +224,19 @@ func (r *Repository) GetPackagesByName(
 		release.CommitSHA = commitSHA
 	}
 
-	// Order by the source Git commit timestamp, not the GHCR publication time
-	// or a mutable tag such as "latest". Releases without resolved commit
-	// metadata are kept after releases with a known commit timestamp.
+	// Prefer source commit time when available. If a tag cannot be resolved
+	// to a commit, fall back to the package's creation time so it is still
+	// ordered newest-first rather than being pushed behind every resolved tag.
 	sort.SliceStable(result.Releases, func(i, j int) bool {
 		left, right := result.Releases[i], result.Releases[j]
-		if left.CommitTime.IsZero() != right.CommitTime.IsZero() {
-			return !left.CommitTime.IsZero()
+		leftTime, rightTime := left.CommitTime, right.CommitTime
+		if leftTime.IsZero() {
+			leftTime = left.CreatedAt
 		}
-		return left.CommitTime.After(right.CommitTime)
+		if rightTime.IsZero() {
+			rightTime = right.CreatedAt
+		}
+		return leftTime.After(rightTime)
 	})
 
 	return result, nil
