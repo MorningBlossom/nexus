@@ -64,14 +64,15 @@ type EnvironmentVariable struct {
 
 // Environment represents an app-specific deployment environment.
 type Environment struct {
-	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
-	AppID     string             `bson:"app_id" json:"app_id"`
-	Name      string             `bson:"name" json:"name"`
-	Secret    string                `bson:"secret" json:"-"`
+	ID        primitive.ObjectID    `bson:"_id,omitempty" json:"id,omitempty"`
+	AppID     string                `bson:"app_id" json:"app_id"`
+	EnvName   string                `bson:"env_name" json:"env_name"`
+	EnvValue  string                `bson:"env_value" json:"-"`
+	IsSecret  bool                  `bson:"is_secret" json:"is_secret"`
 	Variables []EnvironmentVariable `bson:"variables,omitempty" json:"variables,omitempty"`
 	Service   string                `bson:"service" json:"service"`
-	Artifact  string             `bson:"artifact" json:"artifact"`
-	CreatedAt time.Time          `bson:"created_at" json:"created_at"`
-	UpdatedAt time.Time          `bson:"updated_at" json:"updated_at"`
-	Deleted   bool               `bson:"deleted,omitempty" json:"-"`
+	Artifact  string                `bson:"artifact" json:"artifact"`
+	CreatedAt time.Time             `bson:"created_at" json:"created_at"`
+	UpdatedAt time.Time             `bson:"updated_at" json:"updated_at"`
+	Deleted   bool                  `bson:"deleted,omitempty" json:"-"`
 }
