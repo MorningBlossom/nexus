@@ -18,6 +18,7 @@ type ReleaseArtifacts struct {
 
 type Release struct {
 	Tag           string        `json:"tag"`
+	PRTitle       string        `json:"prTitle"`
 	CommitMessage string        `json:"commitMessage"`
 	CommitSHA     string        `json:"commitSha"`
 	Packages      []RepoPackage `json:"packages"`
@@ -212,6 +213,19 @@ func (r *Repository) GetPackagesByName(
 		}
 
 		release.CommitMessage = strings.SplitN(commit.GetCommit().GetMessage(), "\n", 2)[0]
+		// Use the title of a pull request associated with this commit when available.
+		// If GitHub has no associated PR (or the lookup fails), the UI falls back
+		// to the commit message.
+		if pullRequests, _, prErr := r.api.PullRequests.ListPullRequestsWithCommit(
+			ctx, owner, repoName, commit.GetSHA(), &gh.ListOptions{PerPage: 100},
+		); prErr == nil {
+			for _, pullRequest := range pullRequests {
+				if title := strings.TrimSpace(pullRequest.GetTitle()); title != "" {
+					release.PRTitle = title
+					break
+				}
+			}
+		}
 		// go-github returns a github.Timestamp here; use its embedded time.Time.
 		// The committer metadata can be absent, so guard it before reading the date.
 		if committer := commit.GetCommit().GetCommitter(); committer != nil {
