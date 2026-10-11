@@ -455,11 +455,38 @@ sectionContent.addEventListener("click", async (event) => {
   if (action === "undo") {
     const change = environmentChanges.find((item) => item.id === button.dataset.changeId);
     if (!change) return;
-    if (change.action === "deleted") environmentRecords.push(change.before);
-    if (change.action === "created") environmentRecords = environmentRecords.filter((item) => item.id !== change.created.id);
-    if (change.action === "updated") environmentRecords = environmentRecords.map((item) => item.id === change.before.id ? change.before : item);
-    environmentChanges = environmentChanges.filter((item) => item.id !== change.id);
-    renderEnvironmentEditor();
+    try {
+      if (change.action === "deleted") {
+        const query = new URLSearchParams({ app_id: selectedApp, id: change.before.id });
+        const response = await fetch(`/environments/restore?${query.toString()}`, { method: "POST" });
+        if (!response.ok) throw new Error(await response.text() || "Failed to restore environment");
+      } else if (change.action === "created") {
+        const query = new URLSearchParams({ app_id: selectedApp, id: change.created.id });
+        const response = await fetch(`/environments?${query.toString()}`, { method: "DELETE" });
+        if (!response.ok) throw new Error(await response.text() || "Failed to undo environment creation");
+      } else if (change.action === "updated") {
+        const previous = change.before;
+        const response = await fetch("/environments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: previous.id,
+            app_id: selectedApp,
+            name: previous.name,
+            url: previous.url,
+            service: previous.service,
+            artifact: previous.artifact,
+            secret: ""
+          })
+        });
+        if (!response.ok) throw new Error(await response.text() || "Failed to undo environment update");
+      }
+      environmentChanges = environmentChanges.filter((item) => item.id !== change.id);
+      await loadEnvironments(selectedApp);
+      renderEnvironmentEditor();
+    } catch (error) {
+      alert(error.message || "Unable to undo environment change");
+    }
   }
   if (action === "cancel") {
     editingEnvironmentId = null;
