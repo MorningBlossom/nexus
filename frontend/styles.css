@@ -161,3 +161,41 @@ button { border: 0; color: inherit; font: inherit; cursor: pointer; }
     grid-template-columns: 1fr 1fr;
   }
 }
+
+
+/* The legacy secret value is plain text until the user marks it as secret. */
+.legacy-secret-field {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 14px;
+  min-width: 0;
+}
+.environment-form .legacy-secret-toggle {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 12px;
+  white-space: nowrap;
+}
+.environment-form .legacy-secret-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+}
+.environment-form .legacy-secret-toggle > span {
+  color: var(--muted);
+  font: 10px var(--mono);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+@media (max-width: 650px) {
+  .legacy-secret-field {
+    grid-template-columns: 1fr;
+  }
+  .environment-form .legacy-secret-toggle {
+    padding-bottom: 0;
+  }
+}
