@@ -105,3 +105,11 @@ button { border: 0; color: inherit; font: inherit; cursor: pointer; }
 .release-artifact-box { max-width: none; min-height: 520px; }.content-wrap[data-section="artifacts"] .page-heading .heading-actions, .content-wrap[data-section="services"] .page-heading .heading-actions { display: none; }
 
 #release-artifacts-content { display: flex; flex-direction: column; gap: 18px; }
+
+
+/* Keep environment creation/editing separate from the management list. */
+.environment-deploy-page:has(> .environment-inline-form) > .environment-manage-card,
+.environment-deploy-page:has(> .environment-inline-form) > .environment-changes-card,
+.environment-deploy-page:has(> .environment-inline-form) > .deploy-page-footer {
+  display: none;
+}
