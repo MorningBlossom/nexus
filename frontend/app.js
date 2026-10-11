@@ -447,7 +447,8 @@ sectionContent.addEventListener("click", async (event) => {
       if (!response.ok) throw new Error(await response.text() || "Failed to delete environment");
       environmentChanges.unshift({ id: `change-${Date.now()}`, action: "deleted", label: deleted.name, before: deleted });
       await loadEnvironments(selectedApp);
-      renderEnvironmentEditor();
+      if (environmentEditorOpen) renderEnvironmentEditor();
+      else renderContent();
     } catch (error) {
       alert(error.message || "Unable to delete environment");
     }
