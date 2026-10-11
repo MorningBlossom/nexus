@@ -67,9 +67,10 @@ async function loadEnvironments(appId) {
   const data = await response.json();
   environmentRecords = data.map((environment) => ({
     id: environment.id,
-    name: environment.name,
+    name: environment.env_name || environment.name || "",
     hasSecret: environment.has_secret,
-    secret: environment.secret || "",
+    secret: environment.env_value || environment.secret || "",
+    isSecret: Boolean(environment.is_secret),
     variables: Array.isArray(environment.variables) ? environment.variables : [],
     service: environment.service,
     artifact: environment.artifact || artifactOptions[0]?.id || '',
