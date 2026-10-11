@@ -106,15 +106,6 @@ button { border: 0; color: inherit; font: inherit; cursor: pointer; }
 
 #release-artifacts-content { display: flex; flex-direction: column; gap: 18px; }
 
-
-/* Keep environment creation/editing separate from the management list. */
-.environment-deploy-page:has(> .environment-inline-form) > .environment-manage-card,
-.environment-deploy-page:has(> .environment-inline-form) > .environment-changes-card,
-.environment-deploy-page:has(> .environment-inline-form) > .deploy-page-footer {
-  display: none;
-}
-
-
 /* Environment variables are a full-width section inside the two-column form grid. */
 .environment-form > .environment-variables-editor {
   grid-column: 1 / -1;
