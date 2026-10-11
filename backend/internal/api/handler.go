@@ -158,7 +158,7 @@ func (h *Handler) GetServicesByApp(w http.ResponseWriter, r *http.Request) {
 }
 
 
-// environmentVariableResponse never exposes a secret's encrypted value.
+// Secret values are decrypted only for the authenticated environment-management API response.
 type environmentVariableResponse struct {
 	Key      string `json:"key"`
 	Value    string `json:"value,omitempty"`
@@ -166,40 +166,55 @@ type environmentVariableResponse struct {
 	HasValue bool   `json:"has_value"`
 }
 
-// environmentResponse deliberately excludes legacy and variable secret values.
 type environmentResponse struct {
 	ID        string    `json:"id"`
 	AppID     string    `json:"app_id"`
 	Name      string    `json:"name"`
 	URL       string    `json:"url"`
-	HasSecret bool                         `json:"has_secret"`
+	Secret    string    `json:"secret,omitempty"`
+	HasSecret bool      `json:"has_secret"`
 	Variables []environmentVariableResponse `json:"variables"`
-	Service   string                       `json:"service"`
+	Service   string    `json:"service"`
 	Artifact  string    `json:"artifact"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-func toEnvironmentResponse(environment *models.Environment) environmentResponse {
+func toEnvironmentResponse(environment *models.Environment, key []byte) (environmentResponse, error) {
 	variables := make([]environmentVariableResponse, 0, len(environment.Variables))
 	hasSecret := environment.Secret != ""
+	response := environmentResponse{}
+	if environment.Secret != "" {
+		secret, err := security.Decrypt(environment.Secret, key)
+		if err != nil {
+			return response, err
+		}
+		response.Secret = secret
+	}
 	for _, variable := range environment.Variables {
 		responseVariable := environmentVariableResponse{
 			Key: variable.Key, IsSecret: variable.IsSecret, HasValue: variable.Value != "",
 		}
-		if !variable.IsSecret {
+		if variable.IsSecret {
+			if variable.Value != "" {
+				value, err := security.Decrypt(variable.Value, key)
+				if err != nil {
+					return response, err
+				}
+				responseVariable.Value = value
+				hasSecret = true
+			}
+		} else {
 			responseVariable.Value = variable.Value
-		} else if variable.Value != "" {
-			hasSecret = true
 		}
 		variables = append(variables, responseVariable)
 	}
 	return environmentResponse{
 		ID: environment.ID.Hex(), AppID: environment.AppID, Name: environment.Name,
-		URL: environment.URL, HasSecret: hasSecret, Variables: variables,
+		URL: environment.URL, Secret: response.Secret, HasSecret: hasSecret, Variables: variables,
 		Service: environment.Service, Artifact: environment.Artifact,
 		CreatedAt: environment.CreatedAt, UpdatedAt: environment.UpdatedAt,
-	}
+	}, nil
 }
 
 func (h *Handler) GetEnvironments(w http.ResponseWriter, r *http.Request) {
@@ -216,8 +231,14 @@ func (h *Handler) GetEnvironments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := make([]environmentResponse, 0, len(environments))
+	key := []byte(os.Getenv("NEXUS_ENCRYPTION_KEY"))
 	for _, environment := range environments {
-		response = append(response, toEnvironmentResponse(environment))
+		item, err := toEnvironmentResponse(environment, key)
+		if err != nil {
+			http.Error(w, "failed to decrypt environment secret", http.StatusInternalServerError)
+			return
+		}
+		response = append(response, item)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(response)
@@ -342,7 +363,12 @@ func (h *Handler) SaveEnvironment(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(toEnvironmentResponse(environment))
+	response, err := toEnvironmentResponse(environment, []byte(os.Getenv("NEXUS_ENCRYPTION_KEY")))
+	if err != nil {
+		http.Error(w, "failed to decrypt environment secret", http.StatusInternalServerError)
+		return
+	}
+	_ = json.NewEncoder(w).Encode(response)
 }
 
 func (h *Handler) DeleteEnvironment(w http.ResponseWriter, r *http.Request) {
