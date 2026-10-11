@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sort"
+	"strings"
 	"time"
 
 	gh "github.com/google/go-github/v68/github"
@@ -15,9 +17,13 @@ type ReleaseArtifacts struct {
 }
 
 type Release struct {
-	Tag       string        `json:"tag"`
-	Packages  []RepoPackage `json:"packages"`
-	CreatedAt time.Time     `json:"-"`
+	Tag           string        `json:"tag"`
+	PRTitle       string        `json:"prTitle"`
+	CommitMessage string        `json:"commitMessage"`
+	CommitSHA     string        `json:"commitSha"`
+	Packages      []RepoPackage `json:"packages"`
+	CreatedAt     time.Time     `json:"-"`
+	CommitTime    time.Time     `json:"-"`
 }
 
 type RepoPackage struct {
@@ -187,9 +193,65 @@ func (r *Repository) GetPackagesByName(
 		}
 
 		for _, tag := range latestVersion.Metadata.Container.Tags {
+			// The mutable "latest" tag is not a release identity. Keep the
+			// immutable version/commit tags as the source for artifact ordering.
+			if strings.EqualFold(tag, "latest") {
+				continue
+			}
 			result.addPackageToRelease(tag, service, latestVersion.CreatedAt.Time)
 		}
 	}
+
+	// Resolve each image tag to its Git commit so the UI can display the
+	// commit subject and SHA rather than the container tag.
+	for i := range result.Releases {
+		release := &result.Releases[i]
+		commit, _, commitErr := r.api.Repositories.GetCommit(ctx, owner, repoName, release.Tag, nil)
+		if commitErr != nil || commit == nil || commit.GetCommit() == nil {
+			// Keep the image tag visible, but don't misrepresent it as a commit SHA.
+			continue
+		}
+
+		release.CommitMessage = strings.SplitN(commit.GetCommit().GetMessage(), "\n", 2)[0]
+		// Use the title of a pull request associated with this commit when available.
+		// If GitHub has no associated PR (or the lookup fails), the UI falls back
+		// to the commit message.
+		if pullRequests, _, prErr := r.api.PullRequests.ListPullRequestsWithCommit(
+			ctx, owner, repoName, commit.GetSHA(), &gh.ListOptions{PerPage: 100},
+		); prErr == nil {
+			for _, pullRequest := range pullRequests {
+				if title := strings.TrimSpace(pullRequest.GetTitle()); title != "" {
+					release.PRTitle = title
+					break
+				}
+			}
+		}
+		// go-github returns a github.Timestamp here; use its embedded time.Time.
+		// The committer metadata can be absent, so guard it before reading the date.
+		if committer := commit.GetCommit().GetCommitter(); committer != nil {
+			release.CommitTime = committer.GetDate().Time
+		}
+		commitSHA := commit.GetSHA()
+		if len(commitSHA) > 7 {
+			commitSHA = commitSHA[:7]
+		}
+		release.CommitSHA = commitSHA
+	}
+
+	// Prefer source commit time when available. If a tag cannot be resolved
+	// to a commit, fall back to the package's creation time so it is still
+	// ordered newest-first rather than being pushed behind every resolved tag.
+	sort.SliceStable(result.Releases, func(i, j int) bool {
+		left, right := result.Releases[i], result.Releases[j]
+		leftTime, rightTime := left.CommitTime, right.CommitTime
+		if leftTime.IsZero() {
+			leftTime = left.CreatedAt
+		}
+		if rightTime.IsZero() {
+			rightTime = right.CreatedAt
+		}
+		return leftTime.After(rightTime)
+	})
 
 	return result, nil
 }

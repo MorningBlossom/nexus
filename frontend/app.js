@@ -268,12 +268,12 @@ async function renderSectionContent() {
         return `
           <section class="release-artifact-box">
             <div class="release-artifact-header">
-              <div><h3>${release.tag}</h3><span>Latest tag for ${packages.length === 1 ? "this service" : "these services"}</span></div>
+              <div><h3>${release.prTitle || release.commitMessage || release.tag}</h3>${release.commitSha ? `<div class="release-commit-sha">Commit: ${release.commitSha}</div>` : ""}</div>
             </div>
             <div class="release-artifact-list">
               ${packages.map((pkg) => `
                 <div class="release-artifact-row">
-                  <span class="docker-mark">▣</span>
+                  <span class="docker-mark" role="img" aria-label="Container image">📦</span>
                   <div><strong>Docker image</strong><span>${pkg.packageName}</span></div>
                 </div>
               `).join("")}
