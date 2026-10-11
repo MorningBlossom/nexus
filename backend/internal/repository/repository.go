@@ -149,13 +149,13 @@ func (r *MongoRepository) GetSecrets(ctx context.Context) ([]*models.ProductionS
 // migrateLegacyEnvironmentFields upgrades environment documents written with the old name/secret fields.
 // Existing legacy secret values were encrypted before storage, so they are marked as secrets.
 func (r *MongoRepository) migrateLegacyEnvironmentFields(ctx context.Context, appID string, id *primitive.ObjectID) error {
-	filter := bson.M{"app_id": appID}
+	nameFilter := bson.M{"app_id": appID, "name": bson.M{"$exists": true}}
 	if id != nil {
-		filter["_id"] = *id
+		nameFilter["_id"] = *id
 	}
 	coll := r.db.Collection("environments")
 
-	if _, err := coll.UpdateMany(ctx, bson.M{"app_id": appID, "name": bson.M{"$exists": true}}, bson.M{"$rename": bson.M{"name": "env_name"}}); err != nil {
+	if _, err := coll.UpdateMany(ctx, nameFilter, bson.M{"$rename": bson.M{"name": "env_name"}}); err != nil {
 		return err
 	}
 
