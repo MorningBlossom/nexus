@@ -232,6 +232,159 @@ function renderEnvironmentEditor() {
   });
 }
 
+
+let environmentsCache = [];
+let editingEnvironmentRecord = null;
+
+function escapeHTML(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  })[char]);
+}
+
+async function renderEnvironmentSection() {
+  sectionContent.hidden = false;
+  dashboardContent.hidden = true;
+  sectionContent.innerHTML = `
+    <section class="environment-card-stack">
+      <div class="service-stack-header">
+        <div><p class="eyebrow">Runtime configuration</p><h3>Environments</h3></div>
+        <button class="primary-button" type="button" data-env-crud="add">+ Add environment</button>
+      </div>
+      <p class="empty-directory">Loading environments…</p>
+    </section>`;
+  try {
+    const response = await fetch(`/environments?app_id=${encodeURIComponent(selectedApp)}`);
+    if (!response.ok) throw new Error(await response.text() || "Failed to load environments");
+    environmentsCache = await response.json();
+    if (!Array.isArray(environmentsCache)) environmentsCache = [];
+    renderEnvironmentList();
+  } catch (error) {
+    console.error("Error loading environments:", error);
+    sectionContent.innerHTML = `<section class="environment-card-stack"><div class="service-stack-header"><div><p class="eyebrow">Runtime configuration</p><h3>Environments</h3></div><button class="primary-button" type="button" data-env-crud="add">+ Add environment</button></div><p class="empty-directory">${escapeHTML(error.message || "Unable to load environments.")}</p></section>`;
+  }
+}
+
+function renderEnvironmentList() {
+  sectionContent.innerHTML = `
+    <section class="environment-card-stack">
+      <div class="service-stack-header">
+        <div><p class="eyebrow">Runtime configuration</p><h3>Environments</h3></div>
+        <button class="primary-button" type="button" data-env-crud="add">+ Add environment</button>
+      </div>
+      <div class="environment-toolbar">
+        <label class="search-field" for="environment-search"><span>⌕</span><input id="environment-search" type="search" placeholder="Search environments" autocomplete="off" /></label>
+      </div>
+      <p class="empty-directory" id="environment-empty" ${environmentsCache.length ? "hidden" : ""}>${environmentsCache.length ? "No environments match your search." : "No environments yet. Add one to configure runtime variables and secrets."}</p>
+      <div id="environment-cards">
+        ${environmentsCache.map((environment) => `
+          <article class="environment-card" data-environment-card data-search="${escapeHTML([environment.name, environment.url, environment.service, environment.artifact].join(" ").toLowerCase())}">
+            <div class="environment-card-header">
+              <div><h3>${escapeHTML(environment.name)}</h3><p>${escapeHTML(environment.url || "No URL configured")}</p></div>
+              <span class="service-health healthy-health">${(environment.variables || []).length} variable${(environment.variables || []).length === 1 ? "" : "s"}</span>
+            </div>
+            <div class="environment-card-details">
+              <div><span class="eyebrow">Applied service</span><strong>${escapeHTML(environment.service || "—")}</strong></div>
+              <div><span class="eyebrow">Artifact</span><strong>${escapeHTML(environment.artifact || "Not selected")}</strong></div>
+              <div class="row-actions"><button type="button" data-env-crud="edit" data-environment-id="${escapeHTML(environment.id)}">Edit</button><button type="button" data-env-crud="delete" data-environment-id="${escapeHTML(environment.id)}">Delete</button></div>
+            </div>
+            ${(environment.variables || []).length ? `<div class="environment-variable-summary">${environment.variables.map((variable) => `<span><code>${escapeHTML(variable.key)}</code> <em>${variable.secret ? (variable.hasValue ? "••••••••" : "Not set") : escapeHTML(variable.value || "")}</em>${variable.secret ? '<b>SECRET</b>' : ""}</span>`).join("")}</div>` : ""}
+          </article>
+        `).join("")}
+      </div>
+    </section>`;
+  const search = document.querySelector("#environment-search");
+  search?.addEventListener("input", () => {
+    const query = search.value.trim().toLowerCase();
+    let visible = 0;
+    document.querySelectorAll("[data-environment-card]").forEach((card) => {
+      card.hidden = !card.dataset.search.includes(query);
+      if (!card.hidden) visible++;
+    });
+    const empty = document.querySelector("#environment-empty");
+    if (empty) {
+      empty.hidden = visible > 0;
+      empty.textContent = "No environments match your search.";
+    }
+  });
+}
+
+function renderEnvironmentForm(environment = null) {
+  editingEnvironmentRecord = environment;
+  const variables = Array.isArray(environment?.variables) && environment.variables.length
+    ? environment.variables : [{ key: "", value: "", secret: false, hasValue: false }];
+  sectionContent.innerHTML = `
+    <section class="environment-editor-card">
+      <div class="editor-card-header">
+        <div><p class="eyebrow">Runtime configuration</p><h3>${environment ? "Edit environment" : "New environment"}</h3></div>
+        <span class="editor-step">${environment ? "Update" : "Create"}</span>
+      </div>
+      <form id="environment-crud-form" class="environment-form">
+        <label><span>Environment name *</span><input name="name" required maxlength="80" value="${escapeHTML(environment?.name || "")}" placeholder="Production" /></label>
+        <label><span>Environment URL</span><input name="url" type="url" value="${escapeHTML(environment?.url || "")}" placeholder="https://api.example.com" /></label>
+        <label><span>Service *</span><input name="service" required value="${escapeHTML(environment?.service || "")}" placeholder="auth-service" /></label>
+        <label><span>Artifact / tag</span><input name="artifact" value="${escapeHTML(environment?.artifact || "")}" placeholder="v1.2.0" /></label>
+        <div class="environment-variable-editor">
+          <div class="environment-variable-heading"><div><p class="eyebrow">Configuration</p><h4>Environment variables & secrets</h4></div><button class="secondary-button" type="button" data-env-crud="add-variable">+ Add variable</button></div>
+          <p class="variable-help">Secret values are encrypted before being stored. Existing secret values are never returned to the browser; leave a secret value blank to keep it unchanged.</p>
+          <div id="environment-variable-rows">
+            ${variables.map((variable, index) => environmentVariableRow(variable, index)).join("")}
+          </div>
+        </div>
+        <div class="editor-actions">
+          <button class="secondary-button" type="button" data-env-crud="cancel">Cancel</button>
+          <button class="primary-button" type="submit">${environment ? "Save changes" : "Create environment"}</button>
+        </div>
+      </form>
+    </section>`;
+  document.querySelector("#environment-crud-form")?.addEventListener("submit", saveEnvironmentForm);
+}
+
+function environmentVariableRow(variable = {}, index = 0) {
+  return `<div class="environment-variable-row" data-variable-row>
+    <label><span>Key</span><input name="variable-key" required value="${escapeHTML(variable.key || "")}" placeholder="DATABASE_URL" /></label>
+    <label><span>Value</span><input name="variable-value" type="${variable.secret ? "password" : "text"}" value="${escapeHTML(variable.secret ? "" : variable.value || "")}" placeholder="${variable.secret && variable.hasValue ? "Saved secret (leave blank to keep)" : "Value"}" autocomplete="off" /></label>
+    <label class="variable-secret-toggle"><input name="variable-secret" type="checkbox" ${variable.secret ? "checked" : ""} /><span>Secret</span></label>
+    <button class="remove-variable-button" type="button" data-env-crud="remove-variable" aria-label="Remove variable">×</button>
+  </div>`;
+}
+
+async function saveEnvironmentForm(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const submitButton = form.querySelector('button[type="submit"]');
+  const variables = [...form.querySelectorAll("[data-variable-row]")].map((row) => ({
+    key: row.querySelector('[name="variable-key"]').value.trim(),
+    value: row.querySelector('[name="variable-value"]').value,
+    secret: row.querySelector('[name="variable-secret"]').checked
+  })).filter((variable) => variable.key);
+  const payload = {
+    ...(editingEnvironmentRecord?.id ? { id: editingEnvironmentRecord.id } : {}),
+    appId: selectedApp,
+    name: form.elements.name.value.trim(),
+    url: form.elements.url.value.trim(),
+    service: form.elements.service.value.trim(),
+    artifact: form.elements.artifact.value.trim(),
+    variables
+  };
+  submitButton.disabled = true;
+  submitButton.textContent = "Saving…";
+  try {
+    const response = await fetch("/environments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) throw new Error(await response.text() || "Failed to save environment");
+    await renderEnvironmentSection();
+  } catch (error) {
+    console.error("Error saving environment:", error);
+    window.alert(error.message || "Unable to save environment.");
+    submitButton.disabled = false;
+    submitButton.textContent = editingEnvironmentRecord ? "Save changes" : "Create environment";
+  }
+}
+
 async function renderSectionContent() {
   if (selectedSection === "overview") {
     dashboardContent.hidden = false;
@@ -311,34 +464,8 @@ async function renderSectionContent() {
       </section>`;
   }
   if (selectedSection === "environments") {
-    sectionContent.innerHTML = `
-      <section class="environment-card-stack"><div class="service-stack-header"><div><p class="eyebrow">Runtime targets</p><h3>Environments</h3></div><button class="primary-button" type="button" data-env-action="add"><span>+</span> Add environment</button></div>
-        <div class="environment-toolbar"><label class="search-field" for="environment-search"><span>⌕</span><input id="environment-search" type="search" placeholder="Search environments" autocomplete="off" /></label><label class="service-filter" for="environment-service-filter"><span>Service</span><select id="environment-service-filter"><option value="all">All services</option><option value="Orbit API">Orbit API</option><option value="Worker queue">Worker queue</option><option value="Image processor">Image processor</option></select></label></div>
-        <p class="empty-directory" id="environment-empty" hidden>No environments match your filters.</p>
-          ${environmentRecords.map((environment) => `
-            <article class="environment-card" data-environment-name="${environment.name.toLowerCase()}" data-environment-url="${environment.url.toLowerCase()}" data-environment-service="${environment.service}">
-              <div class="environment-card-header"><div><h3>${environment.name}</h3><p>Secret · ${environment.secretVisible ? environment.secret : "••••••••"}</p></div><span class="service-health ${environment.statusClass}">${environment.status}</span></div>
-              <div class="environment-card-details"><div><span class="eyebrow">Applied service</span><strong>${environment.service}</strong></div><div><span class="eyebrow">Deployments</span><strong>Automatic</strong></div></div>
-            </article>
-          `).join("")}
-      </section>`;
-    const environmentSearch = document.querySelector("#environment-search");
-    const environmentServiceFilter = document.querySelector("#environment-service-filter");
-    const environmentEmpty = document.querySelector("#environment-empty");
-    const filterEnvironments = () => {
-      const query = environmentSearch.value.trim().toLowerCase();
-      const service = environmentServiceFilter.value;
-      let visibleCount = 0;
-      document.querySelectorAll(".environment-card").forEach((card) => {
-        const matchesQuery = `${card.dataset.environmentName} ${card.dataset.environmentUrl} ${card.dataset.environmentService.toLowerCase()}`.includes(query);
-        const matchesService = service === "all" || card.dataset.environmentService === service;
-        card.hidden = !(matchesQuery && matchesService);
-        if (!card.hidden) visibleCount += 1;
-      });
-      environmentEmpty.hidden = visibleCount > 0;
-    };
-    environmentSearch.addEventListener("input", filterEnvironments);
-    environmentServiceFilter.addEventListener("change", filterEnvironments);
+    await renderEnvironmentSection();
+    return;
   }
   if (selectedSection === "services") {
     const services = await loadServices(selectedApp);
@@ -362,6 +489,49 @@ function renderData() {
     <div class="environment-row"><span class="environment-icon">${mark}</span><div class="environment-copy"><strong>${name}</strong><span>${detail}</span></div><span class="environment-status">${state}</span></div>
   `).join("");
 }
+
+
+sectionContent.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-env-crud]");
+  if (!button) return;
+  const action = button.dataset.envCrud;
+  if (action === "add") {
+    renderEnvironmentForm();
+  } else if (action === "cancel") {
+    await renderEnvironmentSection();
+  } else if (action === "edit") {
+    const environment = environmentsCache.find((item) => item.id === button.dataset.environmentId);
+    if (environment) renderEnvironmentForm(environment);
+  } else if (action === "delete") {
+    const environment = environmentsCache.find((item) => item.id === button.dataset.environmentId);
+    if (!environment || !window.confirm(`Delete environment "${environment.name}" and its configuration?`)) return;
+    try {
+      const response = await fetch(`/environments?app_id=${encodeURIComponent(selectedApp)}&id=${encodeURIComponent(environment.id)}`, { method: "DELETE" });
+      if (!response.ok) throw new Error(await response.text() || "Failed to delete environment");
+      await renderEnvironmentSection();
+    } catch (error) {
+      window.alert(error.message || "Unable to delete environment.");
+    }
+  } else if (action === "add-variable") {
+    const rows = document.querySelector("#environment-variable-rows");
+    if (rows) rows.insertAdjacentHTML("beforeend", environmentVariableRow({}, rows.children.length));
+  } else if (action === "remove-variable") {
+    const rows = document.querySelector("#environment-variable-rows");
+    const row = button.closest("[data-variable-row]");
+    if (rows && row) {
+      if (rows.children.length <= 1) row.querySelectorAll("input").forEach((input) => { if (input.type === "checkbox") input.checked = false; else input.value = ""; });
+      else row.remove();
+    }
+  }
+});
+
+sectionContent.addEventListener("change", (event) => {
+  const secretToggle = event.target.closest('[name="variable-secret"]');
+  if (!secretToggle) return;
+  const row = secretToggle.closest("[data-variable-row]");
+  const valueInput = row?.querySelector('[name="variable-value"]');
+  if (valueInput) valueInput.type = secretToggle.checked ? "password" : "text";
+});
 
 sectionContent.addEventListener("click", (event) => {
   const button = event.target.closest("[data-env-action]");
