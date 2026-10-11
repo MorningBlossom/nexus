@@ -293,7 +293,6 @@ func (h *Handler) SaveEnvironment(w http.ResponseWriter, r *http.Request) {
 		}
 		environment.CreatedAt = existing.CreatedAt
 		environment.EnvValue = existing.EnvValue
-		environment.IsSecret = existing.IsSecret
 	}
 
 	// Keep existing secret values when the editor submits them blank.
