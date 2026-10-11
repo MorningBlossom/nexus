@@ -221,7 +221,7 @@ function renderEnvironmentEditor() {
   sectionContent.innerHTML = `
     <div class="environment-deploy-page">
       <section class="select-artifact-card"><p class="eyebrow">Release target</p><h3>Select Artifact</h3><select id="deploy-artifact-select" aria-label="Select artifact to deploy">${artifactOptions.map((artifact) => `<option value="${artifact.id}">${artifact.label}</option>`).join("")}</select></section>
-      ${environmentFormOpen ? `<section class="environment-inline-form"><div class="editor-card-header"><div><h3>${environment ? environment.name : "Environment details"}</h3></div><span class="editor-step">${environment ? "Edit" : "Create"}</span></div><form id="environment-management-form" class="environment-form"><label><span>ENV NAME</span><input name="name" required value="${environment?.name || ""}" placeholder="Production" /></label><div class="legacy-secret-field"><label><span>LEGACY SECRET (OPTIONAL)</span><input name="secret" type="text" value="${escapeHTML(environment?.secret || "")}" placeholder="${environment?.hasSecret ? "Saved secret" : "Optional secret"}" /></label><label class="legacy-secret-toggle"><input name="secret-is-secret" type="checkbox" /><span>SECRET?</span></label></div><section class="environment-variables-editor"><div class="editor-card-header"><div id="environment-variable-list">${(environment?.variables || []).map((variable, index) => `<div class="environment-variable-row" data-variable-row><label><span>KEY</span><input name="variable-key" value="${escapeHTML(variable.key)}" placeholder="PORT" /></label><label><span>VALUE</span><input name="variable-value" type="text" value="${escapeHTML(variable.value || "")}" placeholder="8080" /></label><label><span>SECRET?</span><input name="variable-is-secret" type="checkbox" ${variable.is_secret ? "checked" : ""} /></label><button type="button" class="secondary-button" data-remove-variable>Remove</button></div>`).join("")}</div></section><label><span>SERVICE NAME</span><select id="environment-service-select" name="service" required><option value="">Loading services...</option></select></label><div class="editor-actions"><button class="secondary-button" type="button" data-env-action="cancel-form">Cancel</button><button class="primary-button" type="submit">${environment ? "Update environment" : "Create environment"}</button></div></form></section>` : ""}
+      ${environmentFormOpen ? `<section class="environment-inline-form"><div class="editor-card-header"><div><h3>${environment ? environment.name : "Environment details"}</h3></div><span class="editor-step">${environment ? "Edit" : "Create"}</span></div><form id="environment-management-form" class="environment-form"><label><span>ENV NAME</span><input name="name" required value="${environment?.name || ""}" placeholder="Production" /></label><div class="legacy-secret-field"><label><span>LEGACY SECRET (OPTIONAL)</span><input name="secret" type="text" value="${escapeHTML(environment?.secret || "")}" placeholder="${environment?.hasSecret ? "Saved secret" : "Optional value"}" /></label><label class="legacy-secret-toggle"><input name="secret-is-secret" type="checkbox" ${environment?.isSecret ? "checked" : ""} /><span>SECRET?</span></label></div><section class="environment-variables-editor"><div class="editor-card-header"><div id="environment-variable-list">${(environment?.variables || []).map((variable, index) => `<div class="environment-variable-row" data-variable-row><label><span>KEY</span><input name="variable-key" value="${escapeHTML(variable.key)}" placeholder="PORT" /></label><label><span>VALUE</span><input name="variable-value" type="text" value="${escapeHTML(variable.value || "")}" placeholder="8080" /></label><label><span>SECRET?</span><input name="variable-is-secret" type="checkbox" ${variable.is_secret ? "checked" : ""} /></label><button type="button" class="secondary-button" data-remove-variable>Remove</button></div>`).join("")}</div></section><label><span>SERVICE NAME</span><select id="environment-service-select" name="service" required><option value="">Loading services...</option></select></label><div class="editor-actions"><button class="secondary-button" type="button" data-env-action="cancel-form">Cancel</button><button class="primary-button" type="submit">${environment ? "Update environment" : "Create environment"}</button></div></form></section>` : ""}
       ${environmentFormOpen ? "" : `
       <section class="environment-manage-card"><div class="environment-manage-header"><p class="eyebrow">Environment targets</p><span>${environmentRecords.length} environments</span></div><div class="environment-list-header"><span>ENV NAME</span><span>SECRET</span><span>SERVICE NAME</span><span>ACTIONS</span></div>
         <div class="environment-manage-list">${environmentRecords.map((item) => `
@@ -289,8 +289,9 @@ function renderEnvironmentEditor() {
     const record = {
       id: editingEnvironmentId || "",
       app_id: selectedApp,
-      name: values.name.trim(),
-      secret: values.secret,
+      env_name: values.name.trim(),
+      env_value: values.secret,
+      is_secret: managementForm.querySelector('input[name="secret-is-secret"]').checked,
       variables: Array.from(managementForm.querySelectorAll("[data-variable-row]")).map((row) => ({
         key: row.querySelector('input[name="variable-key"]').value.trim(),
         value: row.querySelector('input[name="variable-value"]').value,
@@ -535,10 +536,11 @@ sectionContent.addEventListener("click", async (event) => {
           body: JSON.stringify({
             id: previous.id,
             app_id: selectedApp,
-            name: previous.name,
+            env_name: previous.name,
             service: previous.service,
             artifact: previous.artifact,
-            secret: "",
+            env_value: "",
+            is_secret: previous.isSecret,
             variables: (previous.variables || []).map((variable) => ({
               key: variable.key,
               value: variable.is_secret ? "" : (variable.value || ""),
