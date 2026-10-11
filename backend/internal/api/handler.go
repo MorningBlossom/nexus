@@ -293,3 +293,22 @@ func (h *Handler) DeleteEnvironment(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (h *Handler) RestoreEnvironment(w http.ResponseWriter, r *http.Request) {
+	appID := strings.TrimSpace(r.URL.Query().Get("app_id"))
+	idValue := strings.TrimSpace(r.URL.Query().Get("id"))
+	if appID == "" || idValue == "" {
+		http.Error(w, "app_id and id are required", http.StatusBadRequest)
+		return
+	}
+	id, err := primitive.ObjectIDFromHex(idValue)
+	if err != nil {
+		http.Error(w, "invalid environment id", http.StatusBadRequest)
+		return
+	}
+	if err := h.mongoRepo.RestoreEnvironment(r.Context(), appID, id); err != nil {
+		http.Error(w, "environment not found", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
