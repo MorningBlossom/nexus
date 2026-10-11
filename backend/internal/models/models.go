@@ -52,3 +52,22 @@ type ProductionSecret struct {
 	Value     string              `bson:"value" json:"value"`
 	UpdatedAt time.Time           `bson:"updated_at" json:"updated_at"`
 }
+
+type EnvironmentVariable struct {
+	Key      string `bson:"key" json:"key"`
+	Value    string `bson:"value" json:"-"`
+	Secret   bool   `bson:"secret" json:"secret"`
+	HasValue bool   `bson:"has_value" json:"hasValue"`
+}
+
+type Environment struct {
+	ID        primitive.ObjectID  `bson:"_id,omitempty" json:"id,omitempty"`
+	AppID     string              `bson:"app_id" json:"appId"`
+	Name      string              `bson:"name" json:"name"`
+	URL       string              `bson:"url" json:"url"`
+	Service   string              `bson:"service" json:"service"`
+	Artifact  string              `bson:"artifact" json:"artifact"`
+	Variables []EnvironmentVariable `bson:"variables" json:"variables"`
+	CreatedAt time.Time           `bson:"created_at" json:"createdAt"`
+	UpdatedAt time.Time           `bson:"updated_at" json:"updatedAt"`
+}
