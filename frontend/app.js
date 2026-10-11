@@ -209,7 +209,7 @@ function renderEnvironmentEditor() {
   sectionContent.innerHTML = `
     <div class="environment-deploy-page">
       <section class="select-artifact-card"><p class="eyebrow">Release target</p><h3>Select Artifact</h3><select id="deploy-artifact-select" aria-label="Select artifact to deploy">${artifactOptions.map((artifact) => `<option value="${artifact.id}">${artifact.label}</option>`).join("")}</select></section>
-      ${environmentFormOpen ? `<section class="environment-inline-form"><div class="editor-card-header"><div><p class="eyebrow">${environment ? "Update environment" : "New environment"}</p><h3>${environment ? environment.name : "Add environment"}</h3></div><span class="editor-step">${environment ? "Edit" : "Create"}</span></div><form id="environment-management-form" class="environment-form"><label><span>ENV NAME</span><input name="name" required value="${environment?.name || ""}" placeholder="Production" /></label><label><span>SECRET</span><input name="secret" type="password" ${environment ? "" : "required"} value="" placeholder="${environment?.hasSecret ? "Leave blank to keep saved secret" : "Environment secret"}" /></label><label><span>SERVICE NAME</span><select name="service" required><option>All services</option><option>Orbit API</option><option>Worker queue</option><option>Image processor</option></select></label><div class="editor-actions"><button class="secondary-button" type="button" data-env-action="cancel-form">Cancel</button><button class="primary-button" type="submit">${environment ? "Update environment" : "Add environment"}</button></div></form></section>` : ""}
+      ${environmentFormOpen ? `<section class="environment-inline-form"><div class="editor-card-header"><div><p class="eyebrow">${environment ? "Update environment" : "New environment"}</p><h3>${environment ? environment.name : "Add environment"}</h3></div><span class="editor-step">${environment ? "Edit" : "Create"}</span></div><form id="environment-management-form" class="environment-form"><label><span>ENV NAME</span><input name="name" required value="${environment?.name || ""}" placeholder="Production" /></label><label><span>SECRET</span><input name="secret" type="password" ${environment ? "" : "required"} value="" placeholder="${environment?.hasSecret ? "Leave blank to keep saved secret" : "Environment secret"}" /></label><label><span>SERVICE NAME</span><select id="environment-service-select" name="service" required><option value="">Loading services...</option></select></label><div class="editor-actions"><button class="secondary-button" type="button" data-env-action="cancel-form">Cancel</button><button class="primary-button" type="submit">${environment ? "Update environment" : "Add environment"}</button></div></form></section>` : ""}
       <section class="environment-manage-card"><div class="environment-manage-header"><p class="eyebrow">Environment targets</p><span>${environmentRecords.length} environments</span></div><div class="environment-list-header"><span>ENV NAME</span><span>SECRET</span><span>SERVICE NAME</span><span>ACTIONS</span></div>
         <div class="environment-manage-list">${environmentRecords.map((item) => `
           <div class="environment-manage-row"><strong>${item.name}</strong><span>${item.hasSecret ? "••••••••" : "Not set"}</span><span>${item.service}</span><span class="row-actions"><button type="button" data-env-action="configure" data-environment-id="${item.id}">Edit</button><button type="button" data-env-action="delete" data-environment-id="${item.id}">Delete</button></span></div>
@@ -222,7 +222,33 @@ function renderEnvironmentEditor() {
   const deployArtifactSelect = document.querySelector("#deploy-artifact-select");
   if (environment) deployArtifactSelect.value = environment.artifact;
   else if (preselectedArtifactId) deployArtifactSelect.value = preselectedArtifactId;
-  if (environment) document.querySelector("#environment-management-form").service.value = environment.service;
+  const serviceSelect = document.querySelector("#environment-service-select");
+  if (serviceSelect) {
+    const selectedService = environment?.service || "";
+    loadServices(selectedApp).then((services) => {
+      // Use the app's actual service records rather than hard-coded demo services.
+      const serviceOptions = Array.isArray(services)
+        ? services.filter((service) => service && service.service_id).map((service) => ({
+            value: service.service_id,
+            label: service.service_id
+          }))
+        : [];
+      serviceSelect.innerHTML = serviceOptions.length
+        ? '<option value="">Select a service</option>' + serviceOptions.map((service) =>
+            `<option value="${escapeHTML(service.value)}">${escapeHTML(service.label)}</option>`
+          ).join("")
+        : '<option value="">No services configured for this app</option>';
+      if (selectedService && serviceOptions.some((service) => service.value === selectedService)) {
+        serviceSelect.value = selectedService;
+      } else if (selectedService && !serviceOptions.length) {
+        // Keep the saved value visible if its service has since been removed.
+        serviceSelect.insertAdjacentHTML("beforeend", `<option value="${escapeHTML(selectedService)}" selected>${escapeHTML(selectedService)} (saved)</option>`);
+      }
+    }).catch((error) => {
+      console.error("Unable to load services for environment form:", error);
+      serviceSelect.innerHTML = '<option value="">Unable to load services</option>';
+    });
+  }
   const managementForm = document.querySelector("#environment-management-form");
   const secretInput = document.querySelector("#environment-management-form input[name=\"secret\"]");
   if (managementForm && secretInput) {
