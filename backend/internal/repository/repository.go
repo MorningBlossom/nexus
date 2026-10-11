@@ -160,6 +160,14 @@ func (r *MongoRepository) ListEnvironmentsByApp(ctx context.Context, appID strin
 	return environments, nil
 }
 
+func (r *MongoRepository) GetEnvironment(ctx context.Context, appID string, id primitive.ObjectID) (*models.Environment, error) {
+	var environment models.Environment
+	if err := r.db.Collection("environments").FindOne(ctx, bson.M{"_id": id, "app_id": appID}).Decode(&environment); err != nil {
+		return nil, err
+	}
+	return &environment, nil
+}
+
 func (r *MongoRepository) SaveEnvironment(ctx context.Context, environment *models.Environment) error {
 	if environment.ID.IsZero() {
 		environment.ID = primitive.NewObjectID()
