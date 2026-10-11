@@ -158,23 +158,42 @@ func (h *Handler) GetServicesByApp(w http.ResponseWriter, r *http.Request) {
 }
 
 
-// environmentResponse deliberately excludes the stored secret value.
+// environmentVariableResponse never exposes a secret's encrypted value.
+type environmentVariableResponse struct {
+	Key      string `json:"key"`
+	Value    string `json:"value,omitempty"`
+	IsSecret bool   `json:"is_secret"`
+	HasValue bool   `json:"has_value"`
+}
+
+// environmentResponse deliberately excludes legacy and variable secret values.
 type environmentResponse struct {
 	ID        string    `json:"id"`
 	AppID     string    `json:"app_id"`
 	Name      string    `json:"name"`
 	URL       string    `json:"url"`
-	HasSecret bool      `json:"has_secret"`
-	Service   string    `json:"service"`
+	HasSecret bool                         `json:"has_secret"`
+	Variables []environmentVariableResponse `json:"variables"`
+	Service   string                       `json:"service"`
 	Artifact  string    `json:"artifact"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
 func toEnvironmentResponse(environment *models.Environment) environmentResponse {
+	variables := make([]environmentVariableResponse, 0, len(environment.Variables))
+	for _, variable := range environment.Variables {
+		responseVariable := environmentVariableResponse{
+			Key: variable.Key, IsSecret: variable.IsSecret, HasValue: variable.Value != "",
+		}
+		if !variable.IsSecret {
+			responseVariable.Value = variable.Value
+		}
+		variables = append(variables, responseVariable)
+	}
 	return environmentResponse{
 		ID: environment.ID.Hex(), AppID: environment.AppID, Name: environment.Name,
-		URL: environment.URL, HasSecret: environment.Secret != "",
+		URL: environment.URL, HasSecret: environment.Secret != "", Variables: variables,
 		Service: environment.Service, Artifact: environment.Artifact,
 		CreatedAt: environment.CreatedAt, UpdatedAt: environment.UpdatedAt,
 	}
@@ -206,8 +225,9 @@ type saveEnvironmentRequest struct {
 	AppID    string `json:"app_id"`
 	Name     string `json:"name"`
 	URL      string `json:"url"`
-	Secret   string `json:"secret"`
-	Service  string `json:"service"`
+	Secret    string                    `json:"secret"`
+	Variables []models.EnvironmentVariable `json:"variables"`
+	Service   string                    `json:"service"`
 	Artifact string `json:"artifact"`
 }
 
@@ -249,6 +269,67 @@ func (h *Handler) SaveEnvironment(w http.ResponseWriter, r *http.Request) {
 		}
 		environment.CreatedAt = existing.CreatedAt
 		environment.Secret = existing.Secret
+	}
+
+	// Preserve existing secret variable values when the editor submits them blank.
+	if input.ID != "" {
+		existing, err := h.mongoRepo.GetEnvironment(r.Context(), input.AppID, environment.ID)
+		if err != nil {
+			http.Error(w, "environment not found", http.StatusNotFound)
+			return
+		}
+		existingVariables := make(map[string]models.EnvironmentVariable, len(existing.Variables))
+		for _, variable := range existing.Variables {
+			existingVariables[variable.Key] = variable
+		}
+		key := []byte(os.Getenv("NEXUS_ENCRYPTION_KEY"))
+		for i := range input.Variables {
+			input.Variables[i].Key = strings.TrimSpace(input.Variables[i].Key)
+			if input.Variables[i].Key == "" {
+				if strings.TrimSpace(input.Variables[i].Value) != "" {
+					http.Error(w, "variable key is required when a value is provided", http.StatusBadRequest)
+					return
+				}
+				continue
+			}
+			if input.Variables[i].IsSecret && input.Variables[i].Value == "" {
+				if previous, ok := existingVariables[input.Variables[i].Key]; ok && previous.IsSecret {
+					input.Variables[i].Value = previous.Value
+				}
+			}
+		}
+	}
+
+	// Encrypt only populated secret values; ordinary configuration does not need a key.
+	key := []byte(os.Getenv("NEXUS_ENCRYPTION_KEY"))
+	for i := range input.Variables {
+		variable := &input.Variables[i]
+		variable.Key = strings.TrimSpace(variable.Key)
+		if variable.Key == "" && strings.TrimSpace(variable.Value) == "" {
+			continue
+		}
+		if variable.Key == "" {
+			http.Error(w, "variable key is required when a value is provided", http.StatusBadRequest)
+			return
+		}
+		if variable.IsSecret && variable.Value != "" {
+			if len(key) != 16 && len(key) != 24 && len(key) != 32 {
+				http.Error(w, "NEXUS_ENCRYPTION_KEY must be 16, 24, or 32 bytes to save a secret", http.StatusInternalServerError)
+				return
+			}
+			encrypted, err := security.Encrypt(variable.Value, key)
+			if err != nil {
+				http.Error(w, "failed to encrypt environment variable secret", http.StatusInternalServerError)
+				return
+			}
+			variable.Value = encrypted
+		}
+	}
+	environment.Variables = make([]models.EnvironmentVariable, 0, len(input.Variables))
+	for _, variable := range input.Variables {
+		if variable.Key != "" {
+			environment.Variables = append(environment.Variables, variable)
+		}
 	}
 
 	if input.Secret != "" {
