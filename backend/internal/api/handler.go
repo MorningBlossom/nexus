@@ -3,11 +3,15 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/MorningBlossom/nexus/backend/internal/github"
 	"github.com/MorningBlossom/nexus/backend/internal/models"
 	"github.com/MorningBlossom/nexus/backend/internal/repository"
+	"github.com/MorningBlossom/nexus/backend/internal/security"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type Handler struct {
@@ -151,4 +155,141 @@ func (h *Handler) GetServicesByApp(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(services)
+}
+
+
+// environmentResponse deliberately excludes the stored secret value.
+type environmentResponse struct {
+	ID        string    `json:"id"`
+	AppID     string    `json:"app_id"`
+	Name      string    `json:"name"`
+	URL       string    `json:"url"`
+	HasSecret bool      `json:"has_secret"`
+	Service   string    `json:"service"`
+	Artifact  string    `json:"artifact"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func toEnvironmentResponse(environment *models.Environment) environmentResponse {
+	return environmentResponse{
+		ID: environment.ID.Hex(), AppID: environment.AppID, Name: environment.Name,
+		URL: environment.URL, HasSecret: environment.Secret != "",
+		Service: environment.Service, Artifact: environment.Artifact,
+		CreatedAt: environment.CreatedAt, UpdatedAt: environment.UpdatedAt,
+	}
+}
+
+func (h *Handler) GetEnvironments(w http.ResponseWriter, r *http.Request) {
+	appID := strings.TrimSpace(r.URL.Query().Get("app_id"))
+	if appID == "" {
+		http.Error(w, "app_id is required", http.StatusBadRequest)
+		return
+	}
+
+	environments, err := h.mongoRepo.ListEnvironmentsByApp(r.Context(), appID)
+	if err != nil {
+		http.Error(w, "failed to list environments", http.StatusInternalServerError)
+		return
+	}
+
+	response := make([]environmentResponse, 0, len(environments))
+	for _, environment := range environments {
+		response = append(response, toEnvironmentResponse(environment))
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(response)
+}
+
+type saveEnvironmentRequest struct {
+	ID       string `json:"id"`
+	AppID    string `json:"app_id"`
+	Name     string `json:"name"`
+	URL      string `json:"url"`
+	Secret   string `json:"secret"`
+	Service  string `json:"service"`
+	Artifact string `json:"artifact"`
+}
+
+func (h *Handler) SaveEnvironment(w http.ResponseWriter, r *http.Request) {
+	var input saveEnvironmentRequest
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	input.AppID = strings.TrimSpace(input.AppID)
+	input.Name = strings.TrimSpace(input.Name)
+	input.URL = strings.TrimSpace(input.URL)
+	input.Service = strings.TrimSpace(input.Service)
+	if input.AppID == "" || input.Name == "" || input.Service == "" {
+		http.Error(w, "app_id, name, and service are required", http.StatusBadRequest)
+		return
+	}
+	if _, err := h.mongoRepo.GetApp(r.Context(), input.AppID); err != nil {
+		http.Error(w, "app not found", http.StatusNotFound)
+		return
+	}
+
+	environment := &models.Environment{
+		AppID: input.AppID, Name: input.Name, URL: input.URL,
+		Service: input.Service, Artifact: input.Artifact,
+	}
+	if input.ID != "" {
+		id, err := primitive.ObjectIDFromHex(input.ID)
+		if err != nil {
+			http.Error(w, "invalid environment id", http.StatusBadRequest)
+			return
+		}
+		environment.ID = id
+		existing, err := h.mongoRepo.GetEnvironment(r.Context(), input.AppID, id)
+		if err != nil {
+			http.Error(w, "environment not found", http.StatusNotFound)
+			return
+		}
+		environment.CreatedAt = existing.CreatedAt
+		environment.Secret = existing.Secret
+	}
+
+	if input.Secret != "" {
+		key := []byte(os.Getenv("NEXUS_ENCRYPTION_KEY"))
+		if len(key) != 16 && len(key) != 24 && len(key) != 32 {
+			http.Error(w, "NEXUS_ENCRYPTION_KEY must be 16, 24, or 32 bytes to save a secret", http.StatusInternalServerError)
+			return
+		}
+		encrypted, err := security.Encrypt(input.Secret, key)
+		if err != nil {
+			http.Error(w, "failed to encrypt environment secret", http.StatusInternalServerError)
+			return
+		}
+		environment.Secret = encrypted
+	}
+
+	if err := h.mongoRepo.SaveEnvironment(r.Context(), environment); err != nil {
+		http.Error(w, "failed to save environment", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(toEnvironmentResponse(environment))
+}
+
+func (h *Handler) DeleteEnvironment(w http.ResponseWriter, r *http.Request) {
+	appID := strings.TrimSpace(r.URL.Query().Get("app_id"))
+	idValue := strings.TrimSpace(r.URL.Query().Get("id"))
+	if appID == "" || idValue == "" {
+		http.Error(w, "app_id and id are required", http.StatusBadRequest)
+		return
+	}
+	id, err := primitive.ObjectIDFromHex(idValue)
+	if err != nil {
+		http.Error(w, "invalid environment id", http.StatusBadRequest)
+		return
+	}
+	if err := h.mongoRepo.DeleteEnvironment(r.Context(), appID, id); err != nil {
+		http.Error(w, "environment not found", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
