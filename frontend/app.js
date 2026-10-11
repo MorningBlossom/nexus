@@ -313,21 +313,40 @@ function renderEnvironmentEditor() {
         throw new Error(message || "Failed to save environment");
       }
       const saved = await response.json();
+      const savedSnapshot = { ...saved, hasSecret: saved.has_secret };
+      const savedLabel = saved.env_name || saved.name || "Environment";
       const pendingCreation = environmentChanges.find(
         (change) => change.action === "created" && change.created?.id === saved.id
       );
       if (pendingCreation) {
-        // An environment created in this pending change set is still a creation,
-        // even if it is edited again before deployment. Keep one undoable record.
-        pendingCreation.label = saved.env_name || saved.name || "Environment";
-        pendingCreation.created = { ...saved, hasSecret: saved.has_secret };
+        // Keep one creation entry if this environment is edited before deployment.
+        pendingCreation.label = savedLabel;
+        pendingCreation.created = savedSnapshot;
+      } else if (editingEnvironmentId) {
+        const pendingUpdate = environmentChanges.find(
+          (change) => change.action === "updated" && change.created?.id === saved.id
+        );
+        if (pendingUpdate) {
+          // Coalesce repeated edits into one history entry, retaining the original
+          // before snapshot so Undo restores the state before the first edit.
+          pendingUpdate.label = savedLabel;
+          pendingUpdate.created = savedSnapshot;
+        } else {
+          environmentChanges.unshift({
+            id: `change-${Date.now()}`,
+            action: "updated",
+            label: savedLabel,
+            before: previous,
+            created: savedSnapshot
+          });
+        }
       } else {
         environmentChanges.unshift({
           id: `change-${Date.now()}`,
-          action: editingEnvironmentId ? "updated" : "created",
-          label: saved.env_name || saved.name || "Environment",
-          before: previous,
-          created: { ...saved, hasSecret: saved.has_secret }
+          action: "created",
+          label: savedLabel,
+          before: null,
+          created: savedSnapshot
         });
       }
       await loadEnvironments(selectedApp);
