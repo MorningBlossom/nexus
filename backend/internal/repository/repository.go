@@ -181,7 +181,6 @@ func (r *MongoRepository) SaveEnvironment(ctx context.Context, environment *mode
 	update := bson.M{"$set": bson.M{
 		"app_id": environment.AppID,
 		"name": environment.Name,
-		"url": environment.URL,
 		"secret": environment.Secret,
 		"variables": environment.Variables,
 		"service": environment.Service,
