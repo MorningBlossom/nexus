@@ -67,7 +67,6 @@ type Environment struct {
 	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
 	AppID     string             `bson:"app_id" json:"app_id"`
 	Name      string             `bson:"name" json:"name"`
-	URL       string             `bson:"url" json:"url"`
 	Secret    string                `bson:"secret" json:"-"`
 	Variables []EnvironmentVariable `bson:"variables,omitempty" json:"variables,omitempty"`
 	Service   string                `bson:"service" json:"service"`
