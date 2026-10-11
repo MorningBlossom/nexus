@@ -170,7 +170,6 @@ type environmentResponse struct {
 	ID        string    `json:"id"`
 	AppID     string    `json:"app_id"`
 	Name      string    `json:"name"`
-	URL       string    `json:"url"`
 	Secret    string    `json:"secret,omitempty"`
 	HasSecret bool      `json:"has_secret"`
 	Variables []environmentVariableResponse `json:"variables"`
@@ -211,7 +210,7 @@ func toEnvironmentResponse(environment *models.Environment, key []byte) (environ
 	}
 	return environmentResponse{
 		ID: environment.ID.Hex(), AppID: environment.AppID, Name: environment.Name,
-		URL: environment.URL, Secret: response.Secret, HasSecret: hasSecret, Variables: variables,
+		Secret: response.Secret, HasSecret: hasSecret, Variables: variables,
 		Service: environment.Service, Artifact: environment.Artifact,
 		CreatedAt: environment.CreatedAt, UpdatedAt: environment.UpdatedAt,
 	}, nil
@@ -248,7 +247,6 @@ type saveEnvironmentRequest struct {
 	ID       string `json:"id"`
 	AppID    string `json:"app_id"`
 	Name     string `json:"name"`
-	URL      string `json:"url"`
 	Secret    string                    `json:"secret"`
 	Variables []models.EnvironmentVariable `json:"variables"`
 	Service   string                    `json:"service"`
@@ -264,7 +262,6 @@ func (h *Handler) SaveEnvironment(w http.ResponseWriter, r *http.Request) {
 
 	input.AppID = strings.TrimSpace(input.AppID)
 	input.Name = strings.TrimSpace(input.Name)
-	input.URL = strings.TrimSpace(input.URL)
 	input.Service = strings.TrimSpace(input.Service)
 	if input.AppID == "" || input.Name == "" || input.Service == "" {
 		http.Error(w, "app_id, name, and service are required", http.StatusBadRequest)
@@ -276,7 +273,7 @@ func (h *Handler) SaveEnvironment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	environment := &models.Environment{
-		AppID: input.AppID, Name: input.Name, URL: input.URL,
+		AppID: input.AppID, Name: input.Name,
 		Service: input.Service, Artifact: input.Artifact,
 	}
 	if input.ID != "" {
