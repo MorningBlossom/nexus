@@ -5,6 +5,7 @@ import (
 
 	"github.com/MorningBlossom/nexus/backend/internal/models"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -139,4 +140,57 @@ func (r *MongoRepository) GetSecrets(ctx context.Context) ([]*models.ProductionS
 		return nil, err
 	}
 	return secrets, nil
+}
+
+ // --- Environment Repository ---
+
+func (r *MongoRepository) ListEnvironmentsByApp(ctx context.Context, appID string) ([]*models.Environment, error) {
+	cursor, err := r.db.Collection("environments").Find(ctx, bson.M{"app_id": appID}, options.Find().SetSort(bson.D{{Key: "created_at", Value: 1}}))
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	environments := make([]*models.Environment, 0)
+	if err := cursor.All(ctx, &environments); err != nil {
+		return nil, err
+	}
+	return environments, nil
+}
+
+func (r *MongoRepository) GetEnvironment(ctx context.Context, appID, environmentID string) (*models.Environment, error) {
+	id, err := primitive.ObjectIDFromHex(environmentID)
+	if err != nil {
+		return nil, err
+	}
+	var environment models.Environment
+	if err := r.db.Collection("environments").FindOne(ctx, bson.M{"_id": id, "app_id": appID}).Decode(&environment); err != nil {
+		return nil, err
+	}
+	return &environment, nil
+}
+
+func (r *MongoRepository) SaveEnvironment(ctx context.Context, environment *models.Environment) error {
+	coll := r.db.Collection("environments")
+	if environment.ID.IsZero() {
+		environment.ID = primitive.NewObjectID()
+	}
+	filter := bson.M{"_id": environment.ID, "app_id": environment.AppID}
+	_, err := coll.UpdateOne(ctx, filter, bson.M{"$set": environment}, options.Update().SetUpsert(true))
+	return err
+}
+
+func (r *MongoRepository) DeleteEnvironment(ctx context.Context, appID, environmentID string) error {
+	id, err := primitive.ObjectIDFromHex(environmentID)
+	if err != nil {
+		return err
+	}
+	result, err := r.db.Collection("environments").DeleteOne(ctx, bson.M{"_id": id, "app_id": appID})
+	if err != nil {
+		return err
+	}
+	if result.DeletedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
 }
