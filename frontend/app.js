@@ -489,7 +489,7 @@ sectionContent.addEventListener("click", async (event) => {
   if (action === "add") {
     editingEnvironmentId = null;
     environmentEditorOpen = true;
-    environmentFormOpen = false;
+    environmentFormOpen = true;
     renderContent();
   }
   if (action === "new-row") {
