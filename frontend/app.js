@@ -319,13 +319,13 @@ function renderEnvironmentEditor() {
       if (pendingCreation) {
         // An environment created in this pending change set is still a creation,
         // even if it is edited again before deployment. Keep one undoable record.
-        pendingCreation.label = saved.name;
+        pendingCreation.label = saved.env_name || saved.name || "Environment";
         pendingCreation.created = { ...saved, hasSecret: saved.has_secret };
       } else {
         environmentChanges.unshift({
           id: `change-${Date.now()}`,
           action: editingEnvironmentId ? "updated" : "created",
-          label: saved.name,
+          label: saved.env_name || saved.name || "Environment",
           before: previous,
           created: { ...saved, hasSecret: saved.has_secret }
         });
