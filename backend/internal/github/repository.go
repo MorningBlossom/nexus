@@ -22,6 +22,7 @@ type Release struct {
 	CommitSHA     string        `json:"commitSha"`
 	Packages      []RepoPackage `json:"packages"`
 	CreatedAt     time.Time     `json:"-"`
+	CommitTime    time.Time     `json:"-"`
 }
 
 type RepoPackage struct {
@@ -191,6 +192,11 @@ func (r *Repository) GetPackagesByName(
 		}
 
 		for _, tag := range latestVersion.Metadata.Container.Tags {
+			// The mutable "latest" tag is not a release identity. Keep the
+			// immutable version/commit tags as the source for artifact ordering.
+			if strings.EqualFold(tag, "latest") {
+				continue
+			}
 			result.addPackageToRelease(tag, service, latestVersion.CreatedAt.Time)
 		}
 	}
@@ -206,6 +212,7 @@ func (r *Repository) GetPackagesByName(
 		}
 
 		release.CommitMessage = strings.SplitN(commit.GetCommit().GetMessage(), "\n", 2)[0]
+		release.CommitTime = commit.GetCommit().GetCommitter().GetDate()
 		commitSHA := commit.GetSHA()
 		if len(commitSHA) > 7 {
 			commitSHA = commitSHA[:7]
@@ -213,10 +220,15 @@ func (r *Repository) GetPackagesByName(
 		release.CommitSHA = commitSHA
 	}
 
-	// Show the newest release artifacts first, based on the package version
-	// creation timestamp returned by GitHub.
+	// Order by the source Git commit timestamp, not the GHCR publication time
+	// or a mutable tag such as "latest". Releases without resolved commit
+	// metadata are kept after releases with a known commit timestamp.
 	sort.SliceStable(result.Releases, func(i, j int) bool {
-		return result.Releases[i].CreatedAt.After(result.Releases[j].CreatedAt)
+		left, right := result.Releases[i], result.Releases[j]
+		if left.CommitTime.IsZero() != right.CommitTime.IsZero() {
+			return !left.CommitTime.IsZero()
+		}
+		return left.CommitTime.After(right.CommitTime)
 	})
 
 	return result, nil
