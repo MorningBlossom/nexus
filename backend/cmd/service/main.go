@@ -75,6 +75,10 @@ func main() {
 
 	mux.HandleFunc("/apps", handler.GetApps)
 	mux.HandleFunc("/services", handler.GetServicesByApp)
+	mux.HandleFunc("GET /environments", handler.GetEnvironments)
+	mux.HandleFunc("POST /environments", handler.SaveEnvironment)
+	mux.HandleFunc("DELETE /environments", handler.DeleteEnvironment)
+	mux.HandleFunc("POST /environments/restore", handler.RestoreEnvironment)
 	mux.HandleFunc("/getPackages", handler.GetPackagesByName)
 	mux.HandleFunc("/getPackagesByVersion", handler.GetAllPackagesByRepo)
 	mux.HandleFunc("/getInstallationRepositories", handler.GetInstallationRepositories)

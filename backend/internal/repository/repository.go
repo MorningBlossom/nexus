@@ -2,9 +2,11 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/MorningBlossom/nexus/backend/internal/models"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -139,4 +141,109 @@ func (r *MongoRepository) GetSecrets(ctx context.Context) ([]*models.ProductionS
 		return nil, err
 	}
 	return secrets, nil
+}
+
+
+// --- Environment Repository ---
+
+// migrateLegacyEnvironmentFields upgrades environment documents written with the old name/secret fields.
+// Existing legacy secret values were encrypted before storage, so they are marked as secrets.
+func (r *MongoRepository) migrateLegacyEnvironmentFields(ctx context.Context, appID string, id *primitive.ObjectID) error {
+	nameFilter := bson.M{"app_id": appID, "name": bson.M{"$exists": true}}
+	if id != nil {
+		nameFilter["_id"] = *id
+	}
+	coll := r.db.Collection("environments")
+
+	if _, err := coll.UpdateMany(ctx, nameFilter, bson.M{"$rename": bson.M{"name": "env_name"}}); err != nil {
+		return err
+	}
+
+	secretFilter := bson.M{"app_id": appID, "secret": bson.M{"$exists": true}}
+	if id != nil {
+		secretFilter["_id"] = *id
+	}
+	_, err := coll.UpdateMany(ctx, secretFilter, bson.M{
+		"$rename": bson.M{"secret": "env_value"},
+		"$set":    bson.M{"is_secret": true},
+	})
+	return err
+}
+
+
+
+func (r *MongoRepository) ListEnvironmentsByApp(ctx context.Context, appID string) ([]*models.Environment, error) {
+	if err := r.migrateLegacyEnvironmentFields(ctx, appID, nil); err != nil {
+		return nil, err
+	}
+	cursor, err := r.db.Collection("environments").Find(ctx, bson.M{"app_id": appID, "deleted": bson.M{"$ne": true}}, options.Find().SetSort(bson.D{{Key: "created_at", Value: 1}}))
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	environments := make([]*models.Environment, 0)
+	if err := cursor.All(ctx, &environments); err != nil {
+		return nil, err
+	}
+	return environments, nil
+}
+
+func (r *MongoRepository) GetEnvironment(ctx context.Context, appID string, id primitive.ObjectID) (*models.Environment, error) {
+	if err := r.migrateLegacyEnvironmentFields(ctx, appID, &id); err != nil {
+		return nil, err
+	}
+	var environment models.Environment
+	if err := r.db.Collection("environments").FindOne(ctx, bson.M{"_id": id, "app_id": appID}).Decode(&environment); err != nil {
+		return nil, err
+	}
+	return &environment, nil
+}
+
+func (r *MongoRepository) SaveEnvironment(ctx context.Context, environment *models.Environment) error {
+	if environment.ID.IsZero() {
+		environment.ID = primitive.NewObjectID()
+	}
+	if environment.CreatedAt.IsZero() {
+		environment.CreatedAt = time.Now().UTC()
+	}
+	environment.UpdatedAt = time.Now().UTC()
+
+	filter := bson.M{"_id": environment.ID, "app_id": environment.AppID}
+	update := bson.M{"$set": bson.M{
+		"app_id": environment.AppID,
+		"env_name": environment.EnvName,
+		"env_value": environment.EnvValue,
+		"is_secret": environment.IsSecret,
+		"variables": environment.Variables,
+		"service": environment.Service,
+		"artifact": environment.Artifact,
+		"created_at": environment.CreatedAt,
+		"updated_at": environment.UpdatedAt,
+		"deleted": false,
+	}, "$unset": bson.M{"name": "", "secret": ""}}
+	_, err := r.db.Collection("environments").UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
+	return err
+}
+
+func (r *MongoRepository) DeleteEnvironment(ctx context.Context, appID string, id primitive.ObjectID) error {
+	result, err := r.db.Collection("environments").UpdateOne(ctx, bson.M{"_id": id, "app_id": appID, "deleted": bson.M{"$ne": true}}, bson.M{"$set": bson.M{"deleted": true, "updated_at": time.Now().UTC()}})
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
+func (r *MongoRepository) RestoreEnvironment(ctx context.Context, appID string, id primitive.ObjectID) error {
+	result, err := r.db.Collection("environments").UpdateOne(ctx, bson.M{"_id": id, "app_id": appID, "deleted": true}, bson.M{"$set": bson.M{"deleted": false, "updated_at": time.Now().UTC()}})
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
 }

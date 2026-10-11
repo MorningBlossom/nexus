@@ -52,3 +52,27 @@ type ProductionSecret struct {
 	Value     string              `bson:"value" json:"value"`
 	UpdatedAt time.Time           `bson:"updated_at" json:"updated_at"`
 }
+
+
+// EnvironmentVariable represents a configuration entry attached to an environment.
+// Secret values are stored encrypted; ordinary values remain readable.
+type EnvironmentVariable struct {
+	Key      string `bson:"key" json:"key"`
+	Value    string `bson:"value" json:"value,omitempty"`
+	IsSecret bool   `bson:"is_secret" json:"is_secret"`
+}
+
+// Environment represents an app-specific deployment environment.
+type Environment struct {
+	ID        primitive.ObjectID    `bson:"_id,omitempty" json:"id,omitempty"`
+	AppID     string                `bson:"app_id" json:"app_id"`
+	EnvName   string                `bson:"env_name" json:"env_name"`
+	EnvValue  string                `bson:"env_value" json:"-"`
+	IsSecret  bool                  `bson:"is_secret" json:"is_secret"`
+	Variables []EnvironmentVariable `bson:"variables,omitempty" json:"variables,omitempty"`
+	Service   string                `bson:"service" json:"service"`
+	Artifact  string                `bson:"artifact" json:"artifact"`
+	CreatedAt time.Time             `bson:"created_at" json:"created_at"`
+	UpdatedAt time.Time             `bson:"updated_at" json:"updated_at"`
+	Deleted   bool                  `bson:"deleted,omitempty" json:"-"`
+}

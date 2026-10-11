@@ -1,3 +1,13 @@
+function escapeHTML(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[character]);
+}
+
 let apps = [];
 
 const sections = [
@@ -41,7 +51,7 @@ async function loadApps() {
 
 async function loadServices(appId) {
   try {
-    const response = await fetch(`/services?app_id=${appId}`);
+    const response = await fetch(`/services?app_id=${encodeURIComponent(appId)}`);
     if (!response.ok) throw new Error('Failed to fetch services');
     const data = await response.json();
     return data;
@@ -49,6 +59,26 @@ async function loadServices(appId) {
     console.error('Error loading services:', error);
     return [];
   }
+}
+
+async function loadEnvironments(appId) {
+  const response = await fetch(`/environments?app_id=${encodeURIComponent(appId)}`);
+  if (!response.ok) throw new Error('Failed to fetch environments');
+  const data = await response.json();
+  environmentRecords = data.map((environment) => ({
+    id: environment.id,
+    name: environment.env_name || environment.name || "",
+    hasSecret: environment.has_secret,
+    secret: environment.env_value || environment.secret || "",
+    isSecret: Boolean(environment.is_secret),
+    variables: Array.isArray(environment.variables) ? environment.variables : [],
+    service: environment.service,
+    artifact: environment.artifact || artifactOptions[0]?.id || '',
+    status: 'Configured',
+    statusClass: 'healthy-health'
+  }));
+  environmentsLoadedForApp = appId;
+  return environmentRecords;
 }
 
 const releaseRows = [
@@ -69,9 +99,11 @@ const artifactOptions = [
   { id: "artifact-3", label: "Artifact-3 · Update dependencies" }
 ];
 
-let environmentRecords = [
-  { id: "production", name: "Production", url: "orbit.app", secret: "prod-secret", secretVisible: true, service: "Orbit API", artifact: "artifact-1", status: "Live", statusClass: "healthy-health" }
-];
+let environmentRecords = [];
+let environmentsLoadedForApp = null;
+function environmentRecordsLoadedForApp(appId) {
+  return environmentsLoadedForApp === appId;
+}
 
 let selectedApp = "orbit";
 let selectedSection = "overview";
@@ -161,10 +193,11 @@ function renderContent() {
   const editingEnvironment = selectedSection === "environments" && environmentEditorOpen;
   const showingReleaseDetail = selectedSection === "releases" && releaseDetailOpen;
   const selectedRelease = ["Improve edge caching", "Add retry policy", "Update dependencies"][selectedReleaseIndex];
-  pageTitle.textContent = editingEnvironment ? (editingEnvironmentId ? "Configure environment" : "Add environment") : showingReleaseDetail ? selectedRelease : selectedSection === "overview" ? app.name : section.label;
-  pageDescription.textContent = editingEnvironment ? "Set the environment target, applied service, and artifact attachment." : showingReleaseDetail ? "Deployment details for the selected production release." : selectedSection === "overview" ? app.description : `${section.label} for ${app.name}. Track the work and keep your team moving.`;
+  pageTitle.textContent = editingEnvironment ? "" : showingReleaseDetail ? selectedRelease : selectedSection === "overview" ? app.name : section.label;
+  // Keep the application overview heading visible while editing an environment.\n  // The editor belongs in the main content pane, not a separate full-page title state.\n  document.querySelector(".page-heading").hidden = false;
+  pageDescription.textContent = editingEnvironment ? "Configure the applied service and artifact attachment." : showingReleaseDetail ? "Deployment details for the selected production release." : selectedSection === "overview" ? app.description : `${section.label} for ${app.name}. Track the work and keep your team moving.`;
   breadcrumbApp.textContent = app.name;
-  breadcrumbSection.textContent = editingEnvironment ? (editingEnvironmentId ? "Configure" : "New environment") : showingReleaseDetail ? "Release details" : section.label;
+  breadcrumbSection.textContent = editingEnvironment ? "Environments" : showingReleaseDetail ? "Release details" : section.label;
   appContent.dataset.section = selectedSection;
   if (editingEnvironment) renderEnvironmentEditor();
   else if (showingReleaseDetail) renderReleaseDetail();
@@ -189,46 +222,121 @@ function renderEnvironmentEditor() {
   sectionContent.innerHTML = `
     <div class="environment-deploy-page">
       <section class="select-artifact-card"><p class="eyebrow">Release target</p><h3>Select Artifact</h3><select id="deploy-artifact-select" aria-label="Select artifact to deploy">${artifactOptions.map((artifact) => `<option value="${artifact.id}">${artifact.label}</option>`).join("")}</select></section>
-      ${environmentFormOpen ? `<section class="environment-inline-form"><div class="editor-card-header"><div><p class="eyebrow">${environment ? "Update environment" : "New environment"}</p><h3>${environment ? environment.name : "Add environment"}</h3></div><span class="editor-step">${environment ? "Edit" : "Create"}</span></div><form id="environment-management-form" class="environment-form"><label><span>ENV NAME</span><input name="name" required value="${environment?.name || ""}" placeholder="Production" /></label><label><span>SECRET</span><input name="secret" type="password" required value="${environment?.secret || ""}" placeholder="Environment secret" /></label><label><span>SERVICE NAME</span><select name="service" required><option>All services</option><option>Orbit API</option><option>Worker queue</option><option>Image processor</option></select></label><div class="editor-actions"><button class="secondary-button" type="button" data-env-action="cancel-form">Cancel</button><button class="primary-button" type="submit">${environment ? "Update environment" : "Add environment"}</button></div></form></section>` : ""}
+      ${environmentFormOpen ? `<section class="environment-inline-form"><div class="editor-card-header"><div><h3>${environment ? environment.name : "Environment details"}</h3></div><span class="editor-step">${environment ? "Edit" : "Create"}</span></div><form id="environment-management-form" class="environment-form"><label><span>ENV NAME</span><input name="name" required value="${environment?.name || ""}" placeholder="Production" /></label><div class="legacy-secret-field"><label><span>LEGACY SECRET (OPTIONAL)</span><input name="secret" type="text" value="${escapeHTML(environment?.secret || "")}" placeholder="${environment?.hasSecret ? "Saved secret" : "Optional value"}" /></label><label class="legacy-secret-toggle"><input name="secret-is-secret" type="checkbox" ${environment?.isSecret ? "checked" : ""} /><span>SECRET?</span></label></div><section class="environment-variables-editor"><div class="editor-card-header"><div id="environment-variable-list">${(environment?.variables || []).map((variable, index) => `<div class="environment-variable-row" data-variable-row><label><span>KEY</span><input name="variable-key" value="${escapeHTML(variable.key)}" placeholder="PORT" /></label><label><span>VALUE</span><input name="variable-value" type="text" value="${escapeHTML(variable.value || "")}" placeholder="8080" /></label><label><span>SECRET?</span><input name="variable-is-secret" type="checkbox" ${variable.is_secret ? "checked" : ""} /></label><button type="button" class="secondary-button" data-remove-variable>Remove</button></div>`).join("")}</div></section><label><span>SERVICE NAME</span><select id="environment-service-select" name="service" required><option value="">Loading services...</option></select></label><div class="editor-actions"><button class="secondary-button" type="button" data-env-action="cancel-form">Cancel</button><button class="primary-button" type="submit">${environment ? "Update environment" : "Create environment"}</button></div></form></section>` : ""}
+      ${environmentFormOpen ? "" : `
       <section class="environment-manage-card"><div class="environment-manage-header"><p class="eyebrow">Environment targets</p><span>${environmentRecords.length} environments</span></div><div class="environment-list-header"><span>ENV NAME</span><span>SECRET</span><span>SERVICE NAME</span><span>ACTIONS</span></div>
         <div class="environment-manage-list">${environmentRecords.map((item) => `
-          <div class="environment-manage-row"><strong>${item.name}</strong><span>${item.secretVisible ? item.secret : "••••••••"}</span><span>${item.service}</span><span class="row-actions"><button type="button" data-env-action="configure" data-environment-id="${item.id}">Edit</button><button type="button" data-env-action="delete" data-environment-id="${item.id}">Delete</button></span></div>
+          <div class="environment-manage-row"><strong>${item.name}</strong><span>${item.secret ? escapeHTML(item.secret) : "Not set"}</span><span>${item.service}</span><span class="row-actions"><button type="button" data-env-action="configure" data-environment-id="${item.id}">Edit</button><button type="button" data-env-action="delete" data-environment-id="${item.id}">Delete</button></span></div>
         `).join("")}</div>
       </section>
       ${environmentChanges.length ? `<section class="environment-changes-card"><div class="environment-manage-header"><p class="eyebrow">Recent changes</p><span>${environmentChanges.length} pending</span></div><div class="environment-change-list">${environmentChanges.map((change) => `<div class="environment-change-row"><span class="change-indicator">${change.action === "deleted" ? "−" : change.action === "created" ? "+" : "✎"}</span><div><strong>${change.label}</strong><small>${change.action === "deleted" ? "Environment deleted" : change.action === "created" ? "Environment created" : "Environment updated"}</small></div><button class="secondary-button" type="button" data-env-action="undo" data-change-id="${change.id}">Undo</button></div>`).join("")}</div></section>` : ""}
-      ${environmentFormOpen ? "" : `<button class="add-environment-button" type="button" data-env-action="new-row">+ Add New ENV</button>`}
-      <div class="deploy-page-footer"><span class="attachment-note"><span>↗</span><span>Selected artifact will redeploy to the applied services in these environments.</span></span><button class="primary-button" type="button" data-env-action="deploy">Deploy</button></div>
+      <button class="add-environment-button" type="button" data-env-action="new-row">+ Add New ENV</button>
+      <div class="deploy-page-footer"><span class="attachment-note"><span>↗</span><span>Selected artifact will redeploy to the applied services in these environments.</span></span><button class="primary-button" type="button" data-env-action="deploy">Deploy</button></div>`}
     </div>`;
   const deployArtifactSelect = document.querySelector("#deploy-artifact-select");
   if (environment) deployArtifactSelect.value = environment.artifact;
   else if (preselectedArtifactId) deployArtifactSelect.value = preselectedArtifactId;
-  if (environment) document.querySelector("#environment-management-form").service.value = environment.service;
-  const managementForm = document.querySelector("#environment-management-form");
-  const secretInput = document.querySelector("#environment-management-form input[name=\"secret\"]");
-  if (managementForm && secretInput) {
-    const secretToggle = document.createElement("span");
-    secretToggle.className = "secret-toggle";
-    secretToggle.innerHTML = `<input type="checkbox" aria-label="Show secret" /><span>Show secret</span>`;
-    secretInput.insertAdjacentElement("afterend", secretToggle);
-    secretToggle.querySelector("input").addEventListener("change", (event) => {
-      secretInput.type = event.target.checked ? "text" : "password";
+  const serviceSelect = document.querySelector("#environment-service-select");
+  if (serviceSelect) {
+    const selectedService = environment?.service || "";
+    loadServices(selectedApp).then((services) => {
+      // Use the app's actual service records rather than hard-coded demo services.
+      const serviceOptions = Array.isArray(services)
+        ? services.filter((service) => service && service.service_id).map((service) => ({
+            value: service.service_id,
+            label: service.service_id
+          }))
+        : [];
+      serviceSelect.innerHTML = serviceOptions.length
+        ? '<option value="">Select a service</option>' + serviceOptions.map((service) =>
+            `<option value="${escapeHTML(service.value)}">${escapeHTML(service.label)}</option>`
+          ).join("")
+        : '<option value="">No services configured for this app</option>';
+      if (selectedService && serviceOptions.some((service) => service.value === selectedService)) {
+        serviceSelect.value = selectedService;
+      } else if (selectedService && !serviceOptions.length) {
+        // Keep the saved value visible if its service has since been removed.
+        serviceSelect.insertAdjacentHTML("beforeend", `<option value="${escapeHTML(selectedService)}" selected>${escapeHTML(selectedService)} (saved)</option>`);
+      }
+    }).catch((error) => {
+      console.error("Unable to load services for environment form:", error);
+      serviceSelect.innerHTML = '<option value="">Unable to load services</option>';
     });
   }
-  if (managementForm) managementForm.addEventListener("submit", (event) => {
+  const managementForm = document.querySelector("#environment-management-form");
+  const variableList = document.querySelector("#environment-variable-list");
+  const addVariableButton = document.querySelector("#add-environment-variable");
+  const appendVariableRow = (variable = {}) => {
+    if (!variableList) return;
+    const row = document.createElement("div");
+    row.className = "environment-variable-row";
+    row.dataset.variableRow = "";
+    row.innerHTML = `<label><span>KEY</span><input name="variable-key" value="${escapeHTML(variable.key || "")}" placeholder="PORT" /></label><label><span>VALUE</span><input name="variable-value" type="text" value="${escapeHTML(variable.value || "")}" placeholder="8080" /></label><label><span>SECRET?</span><input name="variable-is-secret" type="checkbox" ${variable.is_secret ? "checked" : ""} /></label><button type="button" class="secondary-button" data-remove-variable>Remove</button>`;
+    variableList.appendChild(row);
+  };
+  if (addVariableButton) addVariableButton.addEventListener("click", () => appendVariableRow());
+  if (variableList) {
+    variableList.addEventListener("click", (event) => {
+      const removeButton = event.target.closest("[data-remove-variable]");
+      if (removeButton) removeButton.closest("[data-variable-row]").remove();
+    });
+  }
+  // Secret values remain visible in the editor by design; the checkbox marks
+  // whether the value is treated as a secret, it does not mask the input.
+  if (managementForm) managementForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(managementForm));
     const previous = editingEnvironmentId ? environmentRecords.find((item) => item.id === editingEnvironmentId) : null;
-    const record = { id: editingEnvironmentId || values.name.toLowerCase().replace(/\s+/g, "-"), name: values.name, url: previous?.url || `${values.name.toLowerCase().replace(/\s+/g, "-")}.orbit.app`, secret: values.secret, secretVisible: secretInput.type === "text", service: values.service, artifact: document.querySelector("#deploy-artifact-select").value, status: "Live", statusClass: "healthy-health" };
-    if (editingEnvironmentId) {
-      environmentChanges.unshift({ id: `change-${Date.now()}`, action: "updated", label: record.name, before: previous });
-      environmentRecords = environmentRecords.map((item) => item.id === editingEnvironmentId ? record : item);
-    } else {
-      environmentRecords.push(record);
-      environmentChanges.unshift({ id: `change-${Date.now()}`, action: "created", label: record.name, created: record });
+    const record = {
+      id: editingEnvironmentId || "",
+      app_id: selectedApp,
+      env_name: values.name.trim(),
+      env_value: values.secret,
+      is_secret: managementForm.querySelector('input[name="secret-is-secret"]').checked,
+      variables: Array.from(managementForm.querySelectorAll("[data-variable-row]")).map((row) => ({
+        key: row.querySelector('input[name="variable-key"]').value.trim(),
+        value: row.querySelector('input[name="variable-value"]').value,
+        is_secret: row.querySelector('input[name="variable-is-secret"]').checked
+      })).filter((variable) => variable.key || variable.value),
+      service: values.service,
+      artifact: document.querySelector("#deploy-artifact-select").value
+    };
+
+    try {
+      const response = await fetch("/environments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(record)
+      });
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || "Failed to save environment");
+      }
+      const saved = await response.json();
+      const pendingCreation = environmentChanges.find(
+        (change) => change.action === "created" && change.created?.id === saved.id
+      );
+      if (pendingCreation) {
+        // An environment created in this pending change set is still a creation,
+        // even if it is edited again before deployment. Keep one undoable record.
+        pendingCreation.label = saved.name;
+        pendingCreation.created = { ...saved, hasSecret: saved.has_secret };
+      } else {
+        environmentChanges.unshift({
+          id: `change-${Date.now()}`,
+          action: editingEnvironmentId ? "updated" : "created",
+          label: saved.name,
+          before: previous,
+          created: { ...saved, hasSecret: saved.has_secret }
+        });
+      }
+      await loadEnvironments(selectedApp);
+      environmentFormOpen = false;
+      editingEnvironmentId = null;
+      renderEnvironmentEditor();
+    } catch (error) {
+      alert(error.message || "Unable to save environment");
     }
-    environmentFormOpen = false;
-    editingEnvironmentId = null;
-    renderEnvironmentEditor();
   });
 }
 
@@ -310,15 +418,25 @@ async function renderSectionContent() {
           `).join("")}
       </section>`;
   }
+  if (selectedSection === "environments" && !environmentRecordsLoadedForApp(selectedApp)) {
+    sectionContent.innerHTML = '<p class="empty-directory">Loading environments...</p>';
+    try {
+      await loadEnvironments(selectedApp);
+    } catch (error) {
+      console.error("Error loading environments:", error);
+      sectionContent.innerHTML = '<p class="empty-directory">Unable to load environments.</p>';
+      return;
+    }
+  }
   if (selectedSection === "environments") {
     sectionContent.innerHTML = `
       <section class="environment-card-stack"><div class="service-stack-header"><div><p class="eyebrow">Runtime targets</p><h3>Environments</h3></div><button class="primary-button" type="button" data-env-action="add"><span>+</span> Add environment</button></div>
         <div class="environment-toolbar"><label class="search-field" for="environment-search"><span>⌕</span><input id="environment-search" type="search" placeholder="Search environments" autocomplete="off" /></label><label class="service-filter" for="environment-service-filter"><span>Service</span><select id="environment-service-filter"><option value="all">All services</option><option value="Orbit API">Orbit API</option><option value="Worker queue">Worker queue</option><option value="Image processor">Image processor</option></select></label></div>
         <p class="empty-directory" id="environment-empty" hidden>No environments match your filters.</p>
           ${environmentRecords.map((environment) => `
-            <article class="environment-card" data-environment-name="${environment.name.toLowerCase()}" data-environment-url="${environment.url.toLowerCase()}" data-environment-service="${environment.service}">
-              <div class="environment-card-header"><div><h3>${environment.name}</h3><p>Secret · ${environment.secretVisible ? environment.secret : "••••••••"}</p></div><span class="service-health ${environment.statusClass}">${environment.status}</span></div>
-              <div class="environment-card-details"><div><span class="eyebrow">Applied service</span><strong>${environment.service}</strong></div><div><span class="eyebrow">Deployments</span><strong>Automatic</strong></div></div>
+            <article class="environment-card" data-environment-name="${environment.name.toLowerCase()}" data-environment-service="${environment.service}">
+              <div class="environment-card-header"><div><h3>${environment.name}</h3><p>Secret · ${environment.secret ? escapeHTML(environment.secret) : "Not set"}</p></div><span class="service-health ${environment.statusClass}">${environment.status}</span></div>
+              <div class="environment-card-details"><div class="environment-applied-service"><span class="eyebrow">Applied service</span><strong>${environment.service}</strong></div><div class="row-actions"><button class="secondary-button" type="button" data-env-action="configure" data-environment-id="${environment.id}">Edit</button><button class="secondary-button" type="button" data-env-action="delete" data-environment-id="${environment.id}">Delete</button></div></div>
             </article>
           `).join("")}
       </section>`;
@@ -363,14 +481,14 @@ function renderData() {
   `).join("");
 }
 
-sectionContent.addEventListener("click", (event) => {
+sectionContent.addEventListener("click", async (event) => {
   const button = event.target.closest("[data-env-action]");
   if (!button) return;
   const action = button.dataset.envAction;
   if (action === "add") {
     editingEnvironmentId = null;
     environmentEditorOpen = true;
-    environmentFormOpen = false;
+    environmentFormOpen = true;
     renderContent();
   }
   if (action === "new-row") {
@@ -386,18 +504,59 @@ sectionContent.addEventListener("click", (event) => {
   }
   if (action === "delete") {
     const deleted = environmentRecords.find((item) => item.id === button.dataset.environmentId);
-    if (deleted) environmentChanges.unshift({ id: `change-${Date.now()}`, action: "deleted", label: deleted.name, before: deleted });
-    environmentRecords = environmentRecords.filter((item) => item.id !== button.dataset.environmentId);
-    renderEnvironmentEditor();
+    if (!deleted || !confirm(`Delete environment "${deleted.name}"?`)) return;
+    try {
+      const query = new URLSearchParams({ app_id: selectedApp, id: deleted.id });
+      const response = await fetch(`/environments?${query.toString()}`, { method: "DELETE" });
+      if (!response.ok) throw new Error(await response.text() || "Failed to delete environment");
+      environmentChanges.unshift({ id: `change-${Date.now()}`, action: "deleted", label: deleted.name, before: deleted });
+      await loadEnvironments(selectedApp);
+      if (environmentEditorOpen) renderEnvironmentEditor();
+      else renderContent();
+    } catch (error) {
+      alert(error.message || "Unable to delete environment");
+    }
   }
   if (action === "undo") {
     const change = environmentChanges.find((item) => item.id === button.dataset.changeId);
     if (!change) return;
-    if (change.action === "deleted") environmentRecords.push(change.before);
-    if (change.action === "created") environmentRecords = environmentRecords.filter((item) => item.id !== change.created.id);
-    if (change.action === "updated") environmentRecords = environmentRecords.map((item) => item.id === change.before.id ? change.before : item);
-    environmentChanges = environmentChanges.filter((item) => item.id !== change.id);
-    renderEnvironmentEditor();
+    try {
+      if (change.action === "deleted") {
+        const query = new URLSearchParams({ app_id: selectedApp, id: change.before.id });
+        const response = await fetch(`/environments/restore?${query.toString()}`, { method: "POST" });
+        if (!response.ok) throw new Error(await response.text() || "Failed to restore environment");
+      } else if (change.action === "created") {
+        const query = new URLSearchParams({ app_id: selectedApp, id: change.created.id });
+        const response = await fetch(`/environments?${query.toString()}`, { method: "DELETE" });
+        if (!response.ok) throw new Error(await response.text() || "Failed to undo environment creation");
+      } else if (change.action === "updated") {
+        const previous = change.before;
+        const response = await fetch("/environments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: previous.id,
+            app_id: selectedApp,
+            env_name: previous.name,
+            service: previous.service,
+            artifact: previous.artifact,
+            env_value: "",
+            is_secret: previous.isSecret,
+            variables: (previous.variables || []).map((variable) => ({
+              key: variable.key,
+              value: variable.is_secret ? "" : (variable.value || ""),
+              is_secret: variable.is_secret
+            }))
+          })
+        });
+        if (!response.ok) throw new Error(await response.text() || "Failed to undo environment update");
+      }
+      environmentChanges = environmentChanges.filter((item) => item.id !== change.id);
+      await loadEnvironments(selectedApp);
+      renderEnvironmentEditor();
+    } catch (error) {
+      alert(error.message || "Unable to undo environment change");
+    }
   }
   if (action === "cancel") {
     editingEnvironmentId = null;
@@ -425,7 +584,10 @@ sectionContent.addEventListener("click", (event) => {
     environmentFormOpen = false;
     editingEnvironmentId = null;
     renderSections();
-    renderContent();
+    loadEnvironments(selectedApp).then(() => renderContent()).catch((error) => {
+      console.error("Error loading environments:", error);
+      alert("Unable to load environments");
+    });
     return;
   }
   const button = event.target.closest("[data-release-action=\"show-release\"]");
