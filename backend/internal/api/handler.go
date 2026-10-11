@@ -182,18 +182,21 @@ type environmentResponse struct {
 
 func toEnvironmentResponse(environment *models.Environment) environmentResponse {
 	variables := make([]environmentVariableResponse, 0, len(environment.Variables))
+	hasSecret := environment.Secret != ""
 	for _, variable := range environment.Variables {
 		responseVariable := environmentVariableResponse{
 			Key: variable.Key, IsSecret: variable.IsSecret, HasValue: variable.Value != "",
 		}
 		if !variable.IsSecret {
 			responseVariable.Value = variable.Value
+		} else if variable.Value != "" {
+			hasSecret = true
 		}
 		variables = append(variables, responseVariable)
 	}
 	return environmentResponse{
 		ID: environment.ID.Hex(), AppID: environment.AppID, Name: environment.Name,
-		URL: environment.URL, HasSecret: environment.Secret != "", Variables: variables,
+		URL: environment.URL, HasSecret: hasSecret, Variables: variables,
 		Service: environment.Service, Artifact: environment.Artifact,
 		CreatedAt: environment.CreatedAt, UpdatedAt: environment.UpdatedAt,
 	}
