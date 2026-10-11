@@ -105,3 +105,23 @@ button { border: 0; color: inherit; font: inherit; cursor: pointer; }
 .release-artifact-box { max-width: none; min-height: 520px; }.content-wrap[data-section="artifacts"] .page-heading .heading-actions, .content-wrap[data-section="services"] .page-heading .heading-actions { display: none; }
 
 #release-artifacts-content { display: flex; flex-direction: column; gap: 18px; }
+
+.environment-variable-editor { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-top: 20px; }
+.environment-variable-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.environment-variable-heading .eyebrow { margin-bottom: 5px; }
+.environment-variable-heading h4 { font-size: 15px; font-weight: 500; margin: 0; }
+.variable-help { color: var(--muted); font-size: 11px; line-height: 1.6; margin: 0 0 16px; }
+.environment-variable-row { display: grid; grid-template-columns: minmax(120px, .8fr) minmax(160px, 1.2fr) auto 28px; align-items: end; gap: 10px; border-top: 1px solid var(--line); padding: 13px 0; }
+.environment-variable-row label { min-width: 0; }
+.environment-variable-row label > span { color: var(--muted); font: 9px var(--mono); text-transform: uppercase; letter-spacing: .06em; }
+.environment-variable-row input:not([type="checkbox"]) { min-width: 0; }
+.environment-variable-row .variable-secret-toggle { display: flex; flex-direction: row; align-items: center; gap: 6px; padding-bottom: 13px; white-space: nowrap; }
+.environment-variable-row .variable-secret-toggle input { accent-color: var(--lime); }
+.remove-variable-button { height: 38px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 20px; }
+.remove-variable-button:hover { border-color: var(--orange); color: var(--orange); }
+.environment-variable-summary { display: flex; flex-direction: column; gap: 7px; padding-top: 15px; }
+.environment-variable-summary > span { display: flex; align-items: center; gap: 9px; color: var(--muted); font: 10px var(--mono); }
+.environment-variable-summary code { color: var(--ink); font: inherit; }
+.environment-variable-summary em { font-style: normal; overflow-wrap: anywhere; }
+.environment-variable-summary b { color: var(--orange); font: 8px var(--mono); border: 1px solid #5a4634; padding: 2px 4px; }
+@media (max-width: 650px) { .environment-variable-row { grid-template-columns: 1fr 1fr 28px; }.environment-variable-row .variable-secret-toggle { grid-column: 1 / 3; padding-bottom: 0; }.remove-variable-button { grid-column: 3; grid-row: 1 / 3; } }
