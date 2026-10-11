@@ -140,3 +140,55 @@ func (r *MongoRepository) GetSecrets(ctx context.Context) ([]*models.ProductionS
 	}
 	return secrets, nil
 }
+
+
+// --- Environment Repository ---
+
+func (r *MongoRepository) ListEnvironmentsByApp(ctx context.Context, appID string) ([]*models.Environment, error) {
+	cursor, err := r.db.Collection("environments").Find(ctx, bson.M{"app_id": appID}, options.Find().SetSort(bson.D{{Key: "created_at", Value: 1}}))
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	environments := make([]*models.Environment, 0)
+	if err := cursor.All(ctx, &environments); err != nil {
+		return nil, err
+	}
+	return environments, nil
+}
+
+func (r *MongoRepository) SaveEnvironment(ctx context.Context, environment *models.Environment) error {
+	if environment.ID.IsZero() {
+		environment.ID = primitive.NewObjectID()
+	}
+	if environment.CreatedAt.IsZero() {
+		environment.CreatedAt = time.Now().UTC()
+	}
+	environment.UpdatedAt = time.Now().UTC()
+
+	filter := bson.M{"_id": environment.ID, "app_id": environment.AppID}
+	update := bson.M{"$set": bson.M{
+		"app_id": environment.AppID,
+		"name": environment.Name,
+		"url": environment.URL,
+		"secret": environment.Secret,
+		"service": environment.Service,
+		"artifact": environment.Artifact,
+		"created_at": environment.CreatedAt,
+		"updated_at": environment.UpdatedAt,
+	}}
+	_, err := r.db.Collection("environments").UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
+	return err
+}
+
+func (r *MongoRepository) DeleteEnvironment(ctx context.Context, appID string, id primitive.ObjectID) error {
+	result, err := r.db.Collection("environments").DeleteOne(ctx, bson.M{"_id": id, "app_id": appID})
+	if err != nil {
+		return err
+	}
+	if result.DeletedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
