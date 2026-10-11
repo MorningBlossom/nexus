@@ -268,7 +268,7 @@ async function renderSectionContent() {
         return `
           <section class="release-artifact-box">
             <div class="release-artifact-header">
-              <div><h3>${release.commitMessage || release.tag}</h3><span>${release.commitSha || release.tag}</span></div>
+              <div><h3>${release.commitMessage || release.tag}</h3>${release.commitSha ? `<span>Commit: ${release.commitSha}</span>` : ""}<span>Tag: ${release.tag}</span></div>
             </div>
             <div class="release-artifact-list">
               ${packages.map((pkg) => `
