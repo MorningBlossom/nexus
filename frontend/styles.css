@@ -113,3 +113,60 @@ button { border: 0; color: inherit; font: inherit; cursor: pointer; }
 .environment-deploy-page:has(> .environment-inline-form) > .deploy-page-footer {
   display: none;
 }
+
+
+/* Environment variables are a full-width section inside the two-column form grid. */
+.environment-form > .environment-variables-editor {
+  grid-column: 1 / -1;
+  min-width: 0;
+  width: 100%;
+}
+
+.environment-variables-editor > .editor-card-header {
+  width: 100%;
+  align-items: center;
+  gap: 16px;
+}
+
+.environment-variables-editor > .editor-card-header > div {
+  min-width: 0;
+}
+
+.environment-variables-editor > .editor-card-header .eyebrow {
+  margin: 0 0 8px;
+}
+
+.environment-variables-editor > .editor-card-header h3 {
+  margin: 0;
+}
+
+#environment-variable-list {
+  width: 100%;
+  min-width: 0;
+}
+
+.environment-variable-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto auto;
+  align-items: end;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.environment-variable-row label {
+  min-width: 0;
+}
+
+.environment-variable-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  align-self: center;
+  padding: 0;
+}
+
+@media (max-width: 760px) {
+  .environment-variable-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
