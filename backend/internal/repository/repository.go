@@ -176,7 +176,17 @@ func (r *MongoRepository) SaveEnvironment(ctx context.Context, environment *mode
 		environment.ID = primitive.NewObjectID()
 	}
 	filter := bson.M{"_id": environment.ID, "app_id": environment.AppID}
-	_, err := coll.UpdateOne(ctx, filter, bson.M{"$set": environment}, options.Update().SetUpsert(true))
+	update := bson.M{"$set": bson.M{
+		"app_id": environment.AppID,
+		"name": environment.Name,
+		"url": environment.URL,
+		"service": environment.Service,
+		"artifact": environment.Artifact,
+		"variables": environment.Variables,
+		"created_at": environment.CreatedAt,
+		"updated_at": environment.UpdatedAt,
+	}}
+	_, err := coll.UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
 	return err
 }
 
