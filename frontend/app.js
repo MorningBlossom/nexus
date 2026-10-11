@@ -326,13 +326,23 @@ function renderEnvironmentEditor() {
         throw new Error(message || "Failed to save environment");
       }
       const saved = await response.json();
-      environmentChanges.unshift({
-        id: `change-${Date.now()}`,
-        action: editingEnvironmentId ? "updated" : "created",
-        label: saved.name,
-        before: previous,
-        created: { ...saved, hasSecret: saved.has_secret }
-      });
+      const pendingCreation = environmentChanges.find(
+        (change) => change.action === "created" && change.created?.id === saved.id
+      );
+      if (pendingCreation) {
+        // An environment created in this pending change set is still a creation,
+        // even if it is edited again before deployment. Keep one undoable record.
+        pendingCreation.label = saved.name;
+        pendingCreation.created = { ...saved, hasSecret: saved.has_secret };
+      } else {
+        environmentChanges.unshift({
+          id: `change-${Date.now()}`,
+          action: editingEnvironmentId ? "updated" : "created",
+          label: saved.name,
+          before: previous,
+          created: { ...saved, hasSecret: saved.has_secret }
+        });
+      }
       await loadEnvironments(selectedApp);
       environmentFormOpen = false;
       editingEnvironmentId = null;
