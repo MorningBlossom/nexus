@@ -376,16 +376,6 @@ async function renderSectionContent() {
             </article>
           `).join("")}
       </section>`;
-    try {
-      await loadEnvironments(selectedApp);
-      renderSectionContent();
-      return;
-    } catch (error) {
-      console.error("Error loading environments:", error);
-      sectionContent.querySelector(".environment-card-stack").insertAdjacentHTML("beforeend", '<p class="empty-directory">Unable to load environments.</p>');
-      return;
-    }
-
     const environmentSearch = document.querySelector("#environment-search");
     const environmentServiceFilter = document.querySelector("#environment-service-filter");
     const environmentEmpty = document.querySelector("#environment-empty");
@@ -427,7 +417,7 @@ function renderData() {
   `).join("");
 }
 
-sectionContent.addEventListener("click", (event) => {
+sectionContent.addEventListener("click", async (event) => {
   const button = event.target.closest("[data-env-action]");
   if (!button) return;
   const action = button.dataset.envAction;
@@ -450,9 +440,17 @@ sectionContent.addEventListener("click", (event) => {
   }
   if (action === "delete") {
     const deleted = environmentRecords.find((item) => item.id === button.dataset.environmentId);
-    if (deleted) environmentChanges.unshift({ id: `change-${Date.now()}`, action: "deleted", label: deleted.name, before: deleted });
-    environmentRecords = environmentRecords.filter((item) => item.id !== button.dataset.environmentId);
-    renderEnvironmentEditor();
+    if (!deleted || !confirm(`Delete environment "${deleted.name}"?`)) return;
+    try {
+      const query = new URLSearchParams({ app_id: selectedApp, id: deleted.id });
+      const response = await fetch(`/environments?${query.toString()}`, { method: "DELETE" });
+      if (!response.ok) throw new Error(await response.text() || "Failed to delete environment");
+      environmentChanges.unshift({ id: `change-${Date.now()}`, action: "deleted", label: deleted.name, before: deleted });
+      await loadEnvironments(selectedApp);
+      renderEnvironmentEditor();
+    } catch (error) {
+      alert(error.message || "Unable to delete environment");
+    }
   }
   if (action === "undo") {
     const change = environmentChanges.find((item) => item.id === button.dataset.changeId);
@@ -489,7 +487,10 @@ sectionContent.addEventListener("click", (event) => {
     environmentFormOpen = false;
     editingEnvironmentId = null;
     renderSections();
-    renderContent();
+    loadEnvironments(selectedApp).then(() => renderContent()).catch((error) => {
+      console.error("Error loading environments:", error);
+      alert("Unable to load environments");
+    });
     return;
   }
   const button = event.target.closest("[data-release-action=\"show-release\"]");
