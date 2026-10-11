@@ -536,7 +536,6 @@ sectionContent.addEventListener("click", async (event) => {
             id: previous.id,
             app_id: selectedApp,
             name: previous.name,
-            url: previous.url,
             service: previous.service,
             artifact: previous.artifact,
             secret: "",
