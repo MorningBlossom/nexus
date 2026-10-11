@@ -169,8 +169,9 @@ type environmentVariableResponse struct {
 type environmentResponse struct {
 	ID        string    `json:"id"`
 	AppID     string    `json:"app_id"`
-	Name      string    `json:"name"`
-	Secret    string    `json:"secret,omitempty"`
+	EnvName   string    `json:"env_name"`
+	EnvValue  string    `json:"env_value,omitempty"`
+	IsSecret  bool      `json:"is_secret"`
 	HasSecret bool      `json:"has_secret"`
 	Variables []environmentVariableResponse `json:"variables"`
 	Service   string    `json:"service"`
@@ -181,14 +182,15 @@ type environmentResponse struct {
 
 func toEnvironmentResponse(environment *models.Environment, key []byte) (environmentResponse, error) {
 	variables := make([]environmentVariableResponse, 0, len(environment.Variables))
-	hasSecret := environment.Secret != ""
+	hasSecret := environment.IsSecret && environment.EnvValue != ""
 	response := environmentResponse{}
-	if environment.Secret != "" {
-		secret, err := security.Decrypt(environment.Secret, key)
+	envValue := environment.EnvValue
+	if environment.IsSecret && environment.EnvValue != "" {
+		decrypted, err := security.Decrypt(environment.EnvValue, key)
 		if err != nil {
 			return response, err
 		}
-		response.Secret = secret
+		envValue = decrypted
 	}
 	for _, variable := range environment.Variables {
 		responseVariable := environmentVariableResponse{
@@ -209,8 +211,8 @@ func toEnvironmentResponse(environment *models.Environment, key []byte) (environ
 		variables = append(variables, responseVariable)
 	}
 	return environmentResponse{
-		ID: environment.ID.Hex(), AppID: environment.AppID, Name: environment.Name,
-		Secret: response.Secret, HasSecret: hasSecret, Variables: variables,
+		ID: environment.ID.Hex(), AppID: environment.AppID, EnvName: environment.EnvName,
+		EnvValue: envValue, IsSecret: environment.IsSecret, HasSecret: hasSecret, Variables: variables,
 		Service: environment.Service, Artifact: environment.Artifact,
 		CreatedAt: environment.CreatedAt, UpdatedAt: environment.UpdatedAt,
 	}, nil
@@ -244,13 +246,14 @@ func (h *Handler) GetEnvironments(w http.ResponseWriter, r *http.Request) {
 }
 
 type saveEnvironmentRequest struct {
-	ID       string `json:"id"`
-	AppID    string `json:"app_id"`
-	Name     string `json:"name"`
-	Secret    string                    `json:"secret"`
+	ID        string                      `json:"id"`
+	AppID     string                      `json:"app_id"`
+	EnvName   string                      `json:"env_name"`
+	EnvValue  string                      `json:"env_value"`
+	IsSecret  bool                        `json:"is_secret"`
 	Variables []models.EnvironmentVariable `json:"variables"`
-	Service   string                    `json:"service"`
-	Artifact string `json:"artifact"`
+	Service   string                      `json:"service"`
+	Artifact  string                      `json:"artifact"`
 }
 
 func (h *Handler) SaveEnvironment(w http.ResponseWriter, r *http.Request) {
@@ -261,9 +264,9 @@ func (h *Handler) SaveEnvironment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	input.AppID = strings.TrimSpace(input.AppID)
-	input.Name = strings.TrimSpace(input.Name)
+	input.EnvName = strings.TrimSpace(input.EnvName)
 	input.Service = strings.TrimSpace(input.Service)
-	if input.AppID == "" || input.Name == "" || input.Service == "" {
+	if input.AppID == "" || input.EnvName == "" || input.Service == "" {
 		http.Error(w, "app_id, name, and service are required", http.StatusBadRequest)
 		return
 	}
@@ -273,7 +276,7 @@ func (h *Handler) SaveEnvironment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	environment := &models.Environment{
-		AppID: input.AppID, Name: input.Name,
+		AppID: input.AppID, EnvName: input.EnvName, IsSecret: input.IsSecret,
 		Service: input.Service, Artifact: input.Artifact,
 	}
 	if input.ID != "" {
@@ -289,7 +292,8 @@ func (h *Handler) SaveEnvironment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		environment.CreatedAt = existing.CreatedAt
-		environment.Secret = existing.Secret
+		environment.EnvValue = existing.EnvValue
+		environment.IsSecret = existing.IsSecret
 	}
 
 	// Keep existing secret values when the editor submits them blank.
@@ -339,18 +343,24 @@ func (h *Handler) SaveEnvironment(w http.ResponseWriter, r *http.Request) {
 		environment.Variables = append(environment.Variables, variable)
 	}
 
-	if input.Secret != "" {
-		key := []byte(os.Getenv("NEXUS_ENCRYPTION_KEY"))
-		if len(key) != 16 && len(key) != 24 && len(key) != 32 {
-			http.Error(w, "NEXUS_ENCRYPTION_KEY must be 16, 24, or 32 bytes to save a secret", http.StatusInternalServerError)
-			return
+	if input.IsSecret {
+		if input.EnvValue == "" && input.ID != "" {
+			// Keep the existing encrypted value when editing without changing it.
+		} else if input.EnvValue != "" {
+			key := []byte(os.Getenv("NEXUS_ENCRYPTION_KEY"))
+			if len(key) != 16 && len(key) != 24 && len(key) != 32 {
+				http.Error(w, "NEXUS_ENCRYPTION_KEY must be 16, 24, or 32 bytes to save a secret", http.StatusInternalServerError)
+				return
+			}
+			encrypted, err := security.Encrypt(input.EnvValue, key)
+			if err != nil {
+				http.Error(w, "failed to encrypt environment secret", http.StatusInternalServerError)
+				return
+			}
+			environment.EnvValue = encrypted
 		}
-		encrypted, err := security.Encrypt(input.Secret, key)
-		if err != nil {
-			http.Error(w, "failed to encrypt environment secret", http.StatusInternalServerError)
-			return
-		}
-		environment.Secret = encrypted
+	} else {
+		environment.EnvValue = input.EnvValue
 	}
 
 	if err := h.mongoRepo.SaveEnvironment(r.Context(), environment); err != nil {
