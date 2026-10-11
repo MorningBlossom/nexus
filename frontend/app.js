@@ -70,6 +70,7 @@ async function loadEnvironments(appId) {
     name: environment.name,
     url: environment.url || '',
     hasSecret: environment.has_secret,
+    variables: Array.isArray(environment.variables) ? environment.variables : [],
     service: environment.service,
     artifact: environment.artifact || artifactOptions[0]?.id || '',
     status: 'Configured',
@@ -219,7 +220,7 @@ function renderEnvironmentEditor() {
   sectionContent.innerHTML = `
     <div class="environment-deploy-page">
       <section class="select-artifact-card"><p class="eyebrow">Release target</p><h3>Select Artifact</h3><select id="deploy-artifact-select" aria-label="Select artifact to deploy">${artifactOptions.map((artifact) => `<option value="${artifact.id}">${artifact.label}</option>`).join("")}</select></section>
-      ${environmentFormOpen ? `<section class="environment-inline-form"><div class="editor-card-header"><div><p class="eyebrow">${environment ? "Update environment" : "New environment"}</p><h3>${environment ? environment.name : "Add environment"}</h3></div><span class="editor-step">${environment ? "Edit" : "Create"}</span></div><form id="environment-management-form" class="environment-form"><label><span>ENV NAME</span><input name="name" required value="${environment?.name || ""}" placeholder="Production" /></label><label><span>SECRET</span><input name="secret" type="password" ${environment ? "" : "required"} value="" placeholder="${environment?.hasSecret ? "Leave blank to keep saved secret" : "Environment secret"}" /></label><label><span>SERVICE NAME</span><select id="environment-service-select" name="service" required><option value="">Loading services...</option></select></label><div class="editor-actions"><button class="secondary-button" type="button" data-env-action="cancel-form">Cancel</button><button class="primary-button" type="submit">${environment ? "Update environment" : "Add environment"}</button></div></form></section>` : ""}
+      ${environmentFormOpen ? `<section class="environment-inline-form"><div class="editor-card-header"><div><p class="eyebrow">${environment ? "Update environment" : "New environment"}</p><h3>${environment ? environment.name : "Add environment"}</h3></div><span class="editor-step">${environment ? "Edit" : "Create"}</span></div><form id="environment-management-form" class="environment-form"><label><span>ENV NAME</span><input name="name" required value="${environment?.name || ""}" placeholder="Production" /></label><label><span>LEGACY SECRET (OPTIONAL)</span><input name="secret" type="password" value="" placeholder="${environment?.hasSecret ? "Leave blank to keep saved secret" : "Optional secret"}" /></label><section class="environment-variables-editor"><div class="editor-card-header"><div><p class="eyebrow">Configuration</p><h3>Environment variables</h3></div><button class="secondary-button" type="button" id="add-environment-variable">+ Add variable</button></div><div id="environment-variable-list">${(environment?.variables || []).map((variable, index) => `<div class="environment-variable-row" data-variable-row><label><span>KEY</span><input name="variable-key" value="${escapeHTML(variable.key)}" placeholder="PORT" /></label><label><span>VALUE</span><input name="variable-value" value="${variable.is_secret ? "" : escapeHTML(variable.value || "")}" placeholder="${variable.is_secret && variable.has_value ? "Leave blank to keep saved secret" : "8080"}" /></label><label><span>SECRET?</span><input name="variable-is-secret" type="checkbox" ${variable.is_secret ? "checked" : ""} /></label><button type="button" class="secondary-button" data-remove-variable>Remove</button></div>`).join("")}</div></section><label><span>SERVICE NAME</span><select id="environment-service-select" name="service" required><option value="">Loading services...</option></select></label><div class="editor-actions"><button class="secondary-button" type="button" data-env-action="cancel-form">Cancel</button><button class="primary-button" type="submit">${environment ? "Update environment" : "Add environment"}</button></div></form></section>` : ""}
       <section class="environment-manage-card"><div class="environment-manage-header"><p class="eyebrow">Environment targets</p><span>${environmentRecords.length} environments</span></div><div class="environment-list-header"><span>ENV NAME</span><span>SECRET</span><span>SERVICE NAME</span><span>ACTIONS</span></div>
         <div class="environment-manage-list">${environmentRecords.map((item) => `
           <div class="environment-manage-row"><strong>${item.name}</strong><span>${item.hasSecret ? "••••••••" : "Not set"}</span><span>${item.service}</span><span class="row-actions"><button type="button" data-env-action="configure" data-environment-id="${item.id}">Edit</button><button type="button" data-env-action="delete" data-environment-id="${item.id}">Delete</button></span></div>
@@ -260,6 +261,21 @@ function renderEnvironmentEditor() {
     });
   }
   const managementForm = document.querySelector("#environment-management-form");
+  const variableList = document.querySelector("#environment-variable-list");
+  const addVariableButton = document.querySelector("#add-environment-variable");
+  const appendVariableRow = (variable = {}) => {
+    if (!variableList) return;
+    const row = document.createElement("div");
+    row.className = "environment-variable-row";
+    row.dataset.variableRow = "";
+    row.innerHTML = `<label><span>KEY</span><input name="variable-key" value="${escapeHTML(variable.key || "")}" placeholder="PORT" /></label><label><span>VALUE</span><input name="variable-value" value="${variable.is_secret ? "" : escapeHTML(variable.value || "")}" placeholder="${variable.is_secret && variable.has_value ? "Leave blank to keep saved secret" : "8080"}" /></label><label><span>SECRET?</span><input name="variable-is-secret" type="checkbox" ${variable.is_secret ? "checked" : ""} /></label><button type="button" class="secondary-button" data-remove-variable>Remove</button>`;
+    variableList.appendChild(row);
+  };
+  if (addVariableButton) addVariableButton.addEventListener("click", () => appendVariableRow());
+  if (variableList) variableList.addEventListener("click", (event) => {
+    const removeButton = event.target.closest("[data-remove-variable]");
+    if (removeButton) removeButton.closest("[data-variable-row]").remove();
+  });
   const secretInput = document.querySelector("#environment-management-form input[name=\"secret\"]");
   if (managementForm && secretInput) {
     const secretToggle = document.createElement("span");
@@ -280,6 +296,11 @@ function renderEnvironmentEditor() {
       name: values.name.trim(),
       url: previous?.url || `${values.name.trim().toLowerCase().replace(/\s+/g, "-")}.orbit.app`,
       secret: values.secret,
+      variables: Array.from(managementForm.querySelectorAll("[data-variable-row]")).map((row) => ({
+        key: row.querySelector('input[name="variable-key"]').value.trim(),
+        value: row.querySelector('input[name="variable-value"]').value,
+        is_secret: row.querySelector('input[name="variable-is-secret"]').checked
+      })).filter((variable) => variable.key || variable.value),
       service: values.service,
       artifact: document.querySelector("#deploy-artifact-select").value
     };
@@ -513,7 +534,12 @@ sectionContent.addEventListener("click", async (event) => {
             url: previous.url,
             service: previous.service,
             artifact: previous.artifact,
-            secret: ""
+            secret: "",
+            variables: (previous.variables || []).map((variable) => ({
+              key: variable.key,
+              value: variable.is_secret ? "" : (variable.value || ""),
+              is_secret: variable.is_secret
+            }))
           })
         });
         if (!response.ok) throw new Error(await response.text() || "Failed to undo environment update");
