@@ -180,8 +180,9 @@ func (r *MongoRepository) SaveEnvironment(ctx context.Context, environment *mode
 	filter := bson.M{"_id": environment.ID, "app_id": environment.AppID}
 	update := bson.M{"$set": bson.M{
 		"app_id": environment.AppID,
-		"name": environment.Name,
-		"secret": environment.Secret,
+		"env_name": environment.EnvName,
+		"env_value": environment.EnvValue,
+		"is_secret": environment.IsSecret,
 		"variables": environment.Variables,
 		"service": environment.Service,
 		"artifact": environment.Artifact,
